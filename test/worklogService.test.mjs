@@ -232,11 +232,54 @@ test("recovery accepts exact intended row and restores missing history", async (
     settings: { ...settings, defaultHours: "2" },
     tokens,
   });
-  assert.equal(result[0].status, "success");
+  assert.equal(result.results[0].status, "success");
+  assert.equal(result.maintenanceWarning, null);
   assert.deepEqual(calls, [
     "interrupt", "claim-recovery", "read-row", "restore-history",
     "complete-success", "release", "cleanup",
   ]);
+});
+
+test("recovery revalidates lease after history lookup before restoring history", async () => {
+  let owned = true;
+  let restores = 0;
+  const attempt = {
+    id: "attempt-1",
+    workDate: "2026-07-30",
+    intendedRow: intended,
+    intendedRowHash: rowHash(intended),
+    preWriteRowHash: "row_absent",
+    historyId: "history-1",
+  };
+
+  await assert.rejects(
+    () => recoverInterruptedRuns({
+      ownerId: "recovery",
+      lease: {
+        interruptStale: async () => {},
+        listInterrupted: async () => [attempt],
+        claimRecovery: async () => ({ outcome: "claimed", attempt }),
+        renew: async () => owned,
+        release: async () => {},
+      },
+      store: {
+        hasHistory: async () => {
+          owned = false;
+          return false;
+        },
+        restoreHistory: async () => restores++,
+        complete: async () => {},
+        cleanup: async () => {},
+      },
+      providers: {
+        sheets: { readRow: async () => intended },
+      },
+      settings,
+      tokens,
+    }),
+    /lease ownership/i,
+  );
+  assert.equal(restores, 0);
 });
 
 test("recovery marks absent or unchanged prewrite rows for retry", async () => {
@@ -331,7 +374,7 @@ test("recovery before intent or prewrite checkpoint is retryable without reading
     });
     assert.equal(reads, 0);
     assert.equal(completions[0].errorCategory, "retry");
-    assert.equal(result[0].retry, true);
+    assert.equal(result.results[0].retry, true);
   }
 });
 
@@ -383,8 +426,10 @@ test("recovery cleans up exactly once and preserves every reconciliation error",
   }
 });
 
-test("cleanup failure after successful recovery returns a maintenance warning", async () => {
-  const cleanupError = new Error("cleanup unavailable");
+test("cleanup failure after successful recovery returns a serializable safe warning", async () => {
+  const cleanupError = new Error(
+    "cleanup unavailable Authorization: Bearer maintenance-secret",
+  );
   const result = await recoverInterruptedRuns({
     ownerId: "recovery",
     lease: {
@@ -401,7 +446,11 @@ test("cleanup failure after successful recovery returns a maintenance warning", 
     tokens,
   });
 
-  assert.deepEqual(result, []);
-  assert.equal(result.maintenanceWarning.error, cleanupError);
-  assert.match(result.maintenanceWarning.message, /cleanup unavailable/);
+  assert.deepEqual(result.results, []);
+  assert.deepEqual(result.maintenanceWarning, {
+    category: "maintenance",
+    safeMessage: "cleanup unavailable Authorization: [REDACTED]",
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
+  assert.equal(JSON.stringify(result).includes("maintenance-secret"), false);
 });
