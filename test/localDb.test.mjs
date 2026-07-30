@@ -137,6 +137,11 @@ test("legacy automation schema upgrade archives every populated row", () => {
   const dbPath = path.join(dir, "test.sqlite");
   const legacy = new Database(dbPath);
   legacy.exec(`
+    CREATE TABLE settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE history (
       id TEXT PRIMARY KEY,
       developer_name TEXT NOT NULL,
@@ -179,6 +184,11 @@ test("legacy automation schema upgrade archives every populated row", () => {
     CREATE INDEX automation_attempts_work_date_idx
       ON automation_attempts(work_date);
     INSERT INTO automation_days VALUES (1), (5);
+    INSERT INTO settings (key, value, updated_at) VALUES (
+      'automation',
+      '{"enabled":true,"time":"18:45","startAtLogin":false,"startAtLoginConfigured":true}',
+      '2026-07-30T09:00:00.000Z'
+    );
     INSERT INTO automation_attempts (
       id, work_date, trigger, status, owner_id, intended_row_json,
       created_at, updated_at
@@ -197,6 +207,19 @@ test("legacy automation schema upgrade archives every populated row", () => {
 
   const upgraded = createLocalDb(dbPath);
 
+  assert.deepEqual(getSetting(upgraded, "automation-settings"), {
+    enabled: true,
+    time: "18:45",
+    days: [1, 5],
+    startAtLogin: false,
+    startAtLoginConfigured: true,
+  });
+  assert.deepEqual(getSetting(upgraded, "automation"), {
+    enabled: true,
+    time: "18:45",
+    startAtLogin: false,
+    startAtLoginConfigured: true,
+  });
   assert.deepEqual(
     upgraded.prepare(
       "SELECT weekday FROM automation_days_legacy_v1 ORDER BY weekday",

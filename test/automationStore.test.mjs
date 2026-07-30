@@ -402,6 +402,65 @@ test("interrupted recovery requires a separately claimed live recovery lease", (
   );
 });
 
+test("expired attempt A cannot recover after retry B succeeds or downgrade its day", () => {
+  const { first } = tempDbHandles();
+  const attemptA = claim(first, {
+    trigger: "automatic",
+    ownerId: "runner-a",
+  });
+  const attemptB = claim(first, {
+    trigger: "automatic",
+    ownerId: "runner-b",
+    now: "2026-07-30T10:05:01.000Z",
+  });
+  transitionAutomationAttempt(first, {
+    attemptId: attemptB.attempt.id,
+    ownerId: "runner-b",
+    to: "success",
+    now: "2026-07-30T10:06:00.000Z",
+  });
+
+  assert.throws(
+    () =>
+      claimAutomationRecovery(first, {
+        attemptId: attemptA.attempt.id,
+        ownerId: "stale-recovery",
+        now: "2026-07-30T10:07:00.000Z",
+      }),
+    /terminal|superseded/,
+  );
+  const day = first.prepare("SELECT * FROM automation_days").get();
+  assert.equal(day.terminal_outcome, "success");
+  assert.equal(day.success_attempt_id, attemptB.attempt.id);
+  assert.equal(day.completed_at, "2026-07-30T10:06:00.000Z");
+});
+
+test("later terminal attempts cannot overwrite a successful day", () => {
+  const { first } = tempDbHandles();
+  const successful = claim(first);
+  transitionAutomationAttempt(first, {
+    attemptId: successful.attempt.id,
+    ownerId: "runner",
+    to: "success",
+    now: "2026-07-30T10:01:00.000Z",
+  });
+  const later = claim(first, {
+    ownerId: "manual-later",
+    now: "2026-07-30T10:02:00.000Z",
+  });
+  transitionAutomationAttempt(first, {
+    attemptId: later.attempt.id,
+    ownerId: "manual-later",
+    to: "no_activity",
+    now: "2026-07-30T10:03:00.000Z",
+  });
+
+  const day = first.prepare("SELECT * FROM automation_days").get();
+  assert.equal(day.terminal_outcome, "success");
+  assert.equal(day.success_attempt_id, successful.attempt.id);
+  assert.equal(day.completed_at, "2026-07-30T10:01:00.000Z");
+});
+
 test("stale sweep uses thirty minutes independently of lease expiry", () => {
   const { first } = tempDbHandles();
   const started = claim(first);
