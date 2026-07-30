@@ -69,6 +69,9 @@ activity is cleared, whenever any of those inputs changes. A first-time user
 sees a clean empty dashboard and is directed to Settings only when required
 setup is incomplete.
 
+`Monitored repositories` always means the current selected-repository count,
+independent of whether those repositories contain activity.
+
 ### Settings
 
 Settings uses a section navigator and focused configuration panels:
@@ -117,7 +120,11 @@ shape:
 
 Commit and pull-request counts include only selected repositories. GitHub PR
 search results must be filtered to the selected repository set before activity
-formatting and counting.
+formatting and counting. `repoCount` is the number of selected repositories
+successfully queried by that response. Because repository failures fail the
+whole request, it equals the selected-repository count on every successful
+response; the Dashboard monitored-repository panel reads current selection
+state rather than this response field.
 
 The Generate action may fetch activity and generate the summary in one flow.
 Inspect Activity fetches and reveals the underlying activity without invoking
@@ -145,7 +152,12 @@ selected automatically.
 - Repeated generation for a date replaces that date's local history entry and
   updates the same Google Sheet row.
 - Buttons are disabled during their relevant request. No request cancellation
-  UI is added.
+  UI is added. Inspect and Generate are mutually disabled while either workflow
+  is running.
+- Every activity/generation workflow captures a request identity plus its date,
+  author, and repository input snapshot. A response is discarded if a newer
+  request started or those inputs changed before it completed, preventing stale
+  asynchronous results from repopulating cleared state.
 
 ### Google Sheets
 
