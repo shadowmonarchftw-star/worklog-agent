@@ -11,19 +11,27 @@ local settings.
 
 ### Download the installer
 
-Open the repository's **Actions** tab, select the latest successful **Build
-Windows Installer** run, and download the `AI-Worklog-Agent-Windows` artifact.
-Extract the ZIP and run `AI Worklog Agent-Setup-0.1.2.exe`.
+1. Open the repository on GitHub.
+2. Select **Actions**.
+3. Select **Build Windows Installer** in the left sidebar.
+4. Open the newest workflow run with a green check mark. Older red runs are
+   failed builds and can be ignored.
+5. Scroll to **Artifacts** and download `AI-Worklog-Agent-Windows`.
+6. Extract the downloaded ZIP.
+7. Run `AI Worklog Agent-Setup-0.1.2.exe`.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
 this repository, and choose **Run anyway**.
 
-When an installer artifact is not available, use the source installation below.
+No Node.js, Git, PowerShell, or `npm` commands are required when using the
+installer.
 
-### Install from source
+### Developer fallback: install from source
 
-### 1. Install the prerequisites
+Use this only when an installer artifact is unavailable.
+
+#### 1. Install the prerequisites
 
 Install:
 
@@ -32,7 +40,7 @@ Install:
 
 Use the default options in both installers.
 
-### 2. Download and start the app
+#### 2. Download and start the app
 
 Open PowerShell and run:
 
@@ -49,6 +57,35 @@ allow Node.js on private networks.
 For later starts, open PowerShell in the `worklog-agent` folder and run:
 
 ```powershell
+npm run desktop
+```
+
+## macOS Installation
+
+A downloadable macOS `.dmg` is not published yet. For now, run the app from its
+source code.
+
+### 1. Install the prerequisites
+
+Install:
+
+- [Node.js LTS](https://nodejs.org/)
+- [Git](https://git-scm.com/download/mac)
+
+### 2. Download and start the app
+
+Open Terminal and run:
+
+```bash
+git clone https://github.com/shadowmonarchftw-star/worklog-agent.git
+cd worklog-agent
+npm install
+npm run desktop
+```
+
+For later starts, open Terminal in the `worklog-agent` folder and run:
+
+```bash
 npm run desktop
 ```
 
@@ -102,7 +139,8 @@ access was revoked or the OAuth configuration changed.
 
 ## Daily Use
 
-1. Open the app with `npm run desktop`.
+1. Open **AI Worklog Agent** from the Windows Start menu. Source-code users run
+   `npm run desktop`.
 2. Select the work date.
 3. Click **Generate Worklog**.
 4. Review the generated summary.
@@ -206,4 +244,4 @@ Repository maintainers can create a new installer without a Windows computer:
 6. Open the completed run and download `AI-Worklog-Agent-Windows` under
    **Artifacts**.
 
-Pushing a version tag such as `v0.1.0` also starts the installer workflow.
+Pushing a version tag such as `v0.1.2` also starts the installer workflow.
