@@ -40,12 +40,14 @@ test("uses the compiled Next server for an installed app", () => {
     getServerConfig({
       isPackaged: true,
       appPath: "C:\\Program Files\\AI Worklog Agent\\resources\\app.asar",
+      resourcesPath: "C:\\Program Files\\AI Worklog Agent\\resources",
     }),
     {
-      appPath: "C:\\Program Files\\AI Worklog Agent\\resources\\app.asar",
+      appPath: "C:\\Program Files\\AI Worklog Agent\\resources\\server",
       hostname: "127.0.0.1",
-      mode: "production",
+      mode: "standalone",
       port: 3000,
+      serverPath: "C:\\Program Files\\AI Worklog Agent\\resources\\server\\server.js",
       url: "http://127.0.0.1:3000",
     },
   );

@@ -1,6 +1,6 @@
 {
   "name": "ai-worklog-agent",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Local desktop agent for GitHub-based daily worklogs",
   "author": "AI Worklog Agent",
   "private": true,
@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
     "desktop": "electron .",
-    "build": "next build",
+    "build": "next build && node scripts/prepare-standalone.cjs",
     "dist": "npm run build && electron-builder",
     "dist:dir": "npm run build && electron-builder --dir",
     "dist:mac": "npm run build && electron-builder --mac dmg --publish never",
@@ -33,12 +33,27 @@
     "directories": {
       "output": "release"
     },
-    "asar": false,
+    "compression": "maximum",
     "files": [
       "electron/**/*",
-      ".next/**/*",
-      "next.config.mjs",
-      "package.json"
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "server",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".next/static",
+        "to": "server/.next/static",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
       "target": [

@@ -18,11 +18,14 @@ local settings.
    failed builds and can be ignored.
 5. Scroll to **Artifacts** and download `AI-Worklog-Agent-Windows`.
 6. Extract the downloaded ZIP.
-7. Run `AI Worklog Agent-Setup-0.1.5.exe`.
+7. Run `AI Worklog Agent-Setup-0.1.6.exe`.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
 this repository, and choose **Run anyway**.
+
+Version `0.1.6` and newer use the same standalone runtime on Windows and macOS.
+This fixes the blank window caused by loading SQLite from the packaged archive.
 
 No Node.js, Git, PowerShell, or `npm` commands are required when using the
 installer.
@@ -232,6 +235,12 @@ sign-in opens in the system browser so passkeys can work normally.
 Close and reopen PowerShell after installing Node.js or Git. If the command is
 still unavailable, restart Windows and try again.
 
+### Windows shows a blank app window
+
+Install version `0.1.6` or newer. Older packages could fail while loading the
+local SQLite module. Uninstall the old version, then install the newest
+`AI-Worklog-Agent-Windows` artifact.
+
 ## Development Commands
 
 Run the web interface:
@@ -284,7 +293,7 @@ Repository maintainers can create a new installer without a Windows computer:
 6. Open the completed run and download `AI-Worklog-Agent-Windows` under
    **Artifacts**.
 
-Pushing a version tag such as `v0.1.5` also starts the installer workflow.
+Pushing a version tag such as `v0.1.6` also starts the installer workflow.
 
 ## Creating macOS Installers on GitHub
 

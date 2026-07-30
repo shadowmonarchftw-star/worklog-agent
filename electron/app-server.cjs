@@ -1,10 +1,11 @@
 const http = require("node:http");
 const { spawn } = require("node:child_process");
+const path = require("node:path");
 
 const defaultHostname = "127.0.0.1";
 const defaultPort = 3000;
 
-function getServerConfig({ externalUrl, isPackaged, appPath }) {
+function getServerConfig({ externalUrl, isPackaged, appPath, resourcesPath }) {
   if (externalUrl) {
     return {
       mode: "external",
@@ -12,12 +13,25 @@ function getServerConfig({ externalUrl, isPackaged, appPath }) {
     };
   }
 
-  return {
+  const baseConfig = {
     appPath,
     hostname: defaultHostname,
-    mode: isPackaged ? "production" : "development",
+    mode: "development",
     port: defaultPort,
     url: `http://${defaultHostname}:${defaultPort}`,
+  };
+
+  if (!isPackaged) {
+    return baseConfig;
+  }
+
+  const pathApi = resourcesPath.includes("\\") ? path.win32 : path;
+  const standalonePath = pathApi.join(resourcesPath, "server");
+  return {
+    ...baseConfig,
+    appPath: standalonePath,
+    mode: "standalone",
+    serverPath: pathApi.join(standalonePath, "server.js"),
   };
 }
 
@@ -42,6 +56,24 @@ async function startAppServer(config) {
     const child = spawn("npm", ["run", "dev"], {
       cwd: config.appPath,
       shell: process.platform === "win32",
+      stdio: "inherit",
+    });
+
+    return {
+      stop: async () => child.kill(),
+      url: config.url,
+    };
+  }
+
+  if (config.mode === "standalone") {
+    const child = spawn(process.execPath, [config.serverPath], {
+      cwd: config.appPath,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+        HOSTNAME: config.hostname,
+        PORT: String(config.port),
+      },
       stdio: "inherit",
     });
 

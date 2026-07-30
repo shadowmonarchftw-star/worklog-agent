@@ -29,6 +29,7 @@ app.whenReady().then(async () => {
     appPath: app.getAppPath(),
     externalUrl: process.env.ELECTRON_START_URL,
     isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
   });
   appServer = await startAppServer(serverConfig);
   appUrl = appServer.url;
