@@ -165,6 +165,24 @@ test("manual failures do not request an automatic retry", async () => {
   assert.equal(completions[0].retryDueAt, undefined);
 });
 
+test("automatic retry delay starts at actual failure completion", async () => {
+  const completions = [];
+  let now = new Date("2026-07-30T12:00:00.000Z");
+  const h = harness({ now: () => now });
+  h.args.providers.github.collectActivity = async () => {
+    now = new Date("2026-07-30T12:20:00.000Z");
+    throw new Error("long run failed");
+  };
+  h.args.store.complete = async (value) => completions.push(value);
+
+  await assert.rejects(() => executeWorklog(h.args), /long run failed/);
+
+  assert.equal(
+    completions[0].retryDueAt,
+    "2026-07-30T12:35:00.000Z",
+  );
+});
+
 test("owner loss at a boundary prevents the next external side effect", async () => {
   const h = harness();
   h.args.providers.github.collectActivity = async () => {

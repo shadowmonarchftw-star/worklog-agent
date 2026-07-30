@@ -8,8 +8,10 @@ const { createScheduler } = require("../electron/scheduler.cjs");
 
 function fakeClock(now = "2026-07-30T17:29:59+05:45") {
   const timers = [];
+  const timeouts = [];
+  let timezone = "Asia/Kathmandu";
   return {
-    timezone: "Asia/Kathmandu",
+    timezone: () => timezone,
     now: () => new Date(now),
     setNow(value) {
       now = value;
@@ -22,7 +24,19 @@ function fakeClock(now = "2026-07-30T17:29:59+05:45") {
     clearInterval(timer) {
       timers.splice(timers.indexOf(timer), 1);
     },
+    setTimeout(callback, delay) {
+      const timeout = { callback, delay };
+      timeouts.push(timeout);
+      return timeout;
+    },
+    clearTimeout(timeout) {
+      timeouts.splice(timeouts.indexOf(timeout), 1);
+    },
+    setTimezone(value) {
+      timezone = value;
+    },
     timers,
+    timeouts,
   };
 }
 
@@ -288,28 +302,59 @@ test("recovery failure blocks a run, sanitizes notification, and retries next ti
 });
 
 test("serializable failed recovery notifies and blocks same-wake catch-up", async () => {
-  const { calls, scheduler } = harness({
-    clock: fakeClock("2026-07-30T18:00:00+05:45"),
+  let status = {
+    nextRun: null,
+    lastAutomaticAttempt: {
+      workDate: "2026-07-30",
+      trigger: "automatic",
+      status: "failed",
+      retryDueAt: "2026-07-30T12:00:00.000Z",
+    },
+  };
+  const calls = { run: [], notify: [] };
+  const scheduler = createScheduler({
+    clock: fakeClock("2026-07-30T17:30:00+05:45"),
+    loadSettings: async () => ({
+      enabled: true,
+      time: "17:30",
+      days: [1, 2, 3, 4, 5],
+    }),
+    loadStatus: async () => status,
     recover: async () => ({
       results: [{
         id: "attempt-1",
         status: "failed",
-        errorCategory: "sheet_conflict",
+        errorCategory: "retry",
         errorMessage:
           "Row changed token=private-value ghp_abcdefghijklmnopqrstuvwxyz123456",
       }],
       maintenanceWarning: null,
     }),
+    run: async (input) => {
+      calls.run.push(input);
+      return { status: "success", action: "updated" };
+    },
+    notify: (payload) => calls.notify.push(payload),
   });
 
   const result = await scheduler.start();
 
   assert.equal(calls.run.length, 0);
-  assert.equal(result.results[0].errorCategory, "sheet_conflict");
+  assert.equal(result.results[0].errorCategory, "retry");
   assert.deepEqual(calls.notify, [{
-    title: "Worklog recovery needs attention",
+    title: "Worklog recovery failed",
     body: "Row changed token=[REDACTED] [REDACTED]",
   }]);
+
+  status = {
+    ...status,
+    lastAutomaticAttempt: {
+      ...status.lastAutomaticAttempt,
+      errorCategory: "retry",
+    },
+  };
+  await scheduler.tick(new Date("2026-07-30T17:45:00+05:45"));
+  assert.equal(calls.run.length, 1);
   scheduler.stop();
 });
 
@@ -390,6 +435,67 @@ test("serializes timer, resume, and manual work and handles API already_running"
   assert.deepEqual(await timer, { outcome: "already_running" });
   assert.equal(calls.run.length, 1);
   assert.deepEqual(calls.notify, []);
+});
+
+test("stop aborts active API work and awaits its settlement", async () => {
+  const clock = fakeClock("2026-07-30T17:30:00+05:45");
+  let aborted = false;
+  let markStarted;
+  const started = new Promise((resolve) => {
+    markStarted = resolve;
+  });
+  const { scheduler } = harness({
+    clock,
+    run: async (_input, { signal }) => new Promise((resolve) => {
+      markStarted();
+      signal.addEventListener("abort", () => {
+        aborted = true;
+        resolve({ outcome: "already_running" });
+      }, { once: true });
+    }),
+  });
+
+  const running = scheduler.tick();
+  await started;
+  await scheduler.stop();
+  await running;
+
+  assert.equal(aborted, true);
+  assert.equal(clock.timers.length, 0);
+});
+
+test("stop bounds waiting for API work that ignores abort", async () => {
+  const clock = fakeClock("2026-07-30T17:30:00+05:45");
+  let markStarted;
+  const started = new Promise((resolve) => {
+    markStarted = resolve;
+  });
+  const { scheduler } = harness({
+    clock,
+    run: async () => {
+      markStarted();
+      return new Promise(() => {});
+    },
+  });
+
+  void scheduler.tick();
+  await started;
+  const stopping = scheduler.stop();
+  assert.equal(clock.timeouts[0].delay, 10_000);
+  clock.timeouts[0].callback();
+  await stopping;
+});
+
+test("resume resolves the current OS timezone after it changes", async () => {
+  const clock = fakeClock("2026-07-30T17:30:00+05:45");
+  const { calls, scheduler } = harness({ clock });
+
+  clock.setTimezone("America/New_York");
+  await scheduler.resume(new Date("2026-07-30T17:30:00-04:00"));
+
+  assert.equal(calls.run.length, 1);
+  assert.equal(calls.run[0].timezone, "America/New_York");
+  assert.equal(calls.run[0].workDate, "2026-07-30");
 });
 
 test("Electron composition starts scheduling only for authenticated managed servers", async () => {

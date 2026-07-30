@@ -9,6 +9,7 @@ const {
 const { getServerConfig, startAppServer, waitForAppUrl } = require("./app-server.cjs");
 const { registerExternalLinkHandler } = require("./external-links.cjs");
 const { createScheduler } = require("./scheduler.cjs");
+const { createShutdownHandler } = require("./shutdown.cjs");
 
 let appServer;
 let appUrl;
@@ -31,17 +32,19 @@ async function automationRequest(path, options = {}) {
 
 function createAutomationScheduler() {
   return createScheduler({
-    loadSettings: async () =>
-      (await automationRequest("settings")).settings,
-    loadStatus: async () =>
-      (await automationRequest("settings")).status,
-    recover: () => automationRequest("recover", {
+    loadSettings: async ({ signal } = {}) =>
+      (await automationRequest("settings", { signal })).settings,
+    loadStatus: async ({ signal } = {}) =>
+      (await automationRequest("settings", { signal })).status,
+    recover: ({ signal } = {}) => automationRequest("recover", {
       method: "POST",
       body: "{}",
+      signal,
     }),
-    run: (input) => automationRequest("run", {
+    run: (input, { signal } = {}) => automationRequest("run", {
       method: "POST",
       body: JSON.stringify(input),
+      signal,
     }),
     notify: (payload) => new Notification(payload).show(),
   });
@@ -100,9 +103,12 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", async () => {
-  scheduler?.stop();
-  if (appServer) {
-    await appServer.stop();
-  }
+const shutdown = createShutdownHandler({
+  getScheduler: () => scheduler,
+  getAppServer: () => appServer,
+  exit: (code) => app.exit(code),
+});
+
+app.on("before-quit", (event) => {
+  void shutdown(event);
 });

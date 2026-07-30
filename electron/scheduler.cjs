@@ -1,12 +1,21 @@
 const WAKE_INTERVAL_MS = 60_000;
+const STOP_TIMEOUT_MS = 10_000;
 
 function defaultClock() {
   return {
     clearInterval,
+    clearTimeout,
     now: () => new Date(),
     setInterval,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    setTimeout,
+    timezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
+}
+
+function timezoneAt(clock) {
+  return typeof clock.timezone === "function"
+    ? clock.timezone()
+    : clock.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
 function localParts(date, timezone) {
@@ -76,26 +85,34 @@ function createScheduler({
   notify,
 }) {
   let timer = null;
-  let active = false;
+  let activeController = null;
+  let activePromise = null;
   let reconciliationNeeded = true;
-  let recoveryBlocked = false;
+  let stopped = false;
   const completedDates = new Set();
 
   async function exclusive(operation) {
-    if (active) return { outcome: "already_running" };
-    active = true;
+    if (stopped) return { outcome: "stopped" };
+    if (activePromise) return { outcome: "already_running" };
+    const controller = new AbortController();
+    activeController = controller;
+    const promise = Promise.resolve().then(() => operation(controller.signal));
+    activePromise = promise;
     try {
-      return await operation();
+      return await promise;
     } finally {
-      active = false;
+      if (activePromise === promise) {
+        activeController = null;
+        activePromise = null;
+      }
     }
   }
 
-  async function reconcile() {
+  async function reconcile(signal) {
     try {
-      const result = await recover();
+      const result = await recover({ signal });
       if (result?.outcome === "already_running") {
-        return result;
+        return { blocked: true, result };
       }
       const failed = Array.isArray(result?.results)
         ? result.results.filter((entry) => entry?.status === "failed")
@@ -117,23 +134,27 @@ function createScheduler({
           ),
         });
       }
-      recoveryBlocked = failed.length > 0;
       reconciliationNeeded = false;
-      return result;
+      return { blocked: failed.length > 0, result };
     } catch (error) {
-      recoveryBlocked = true;
+      if (signal?.aborted) {
+        return { blocked: true, result: { outcome: "stopped" } };
+      }
       reconciliationNeeded = true;
       notify({
         title: "Worklog recovery failed",
         body: sanitize(error),
       });
-      return { status: "failed", error: sanitize(error) };
+      return {
+        blocked: true,
+        result: { status: "failed", error: sanitize(error) },
+      };
     }
   }
 
-  async function execute(input, workDate) {
+  async function execute(input, workDate, signal) {
     try {
-      const result = await run(input);
+      const result = await run(input, { signal });
       if (result?.outcome === "already_running" ||
           result?.status === "already_running") {
         return { outcome: "already_running" };
@@ -148,30 +169,30 @@ function createScheduler({
       }
       return result;
     } catch (error) {
+      if (signal?.aborted) return { outcome: "stopped" };
       const message = sanitize(error);
       notify({ title: "Worklog failed", body: message });
       return { status: "failed", error: message };
     }
   }
 
-  async function evaluate(now) {
+  async function evaluate(now, signal) {
     if (reconciliationNeeded) {
-      const recovery = await reconcile();
+      const recovery = await reconcile(signal);
       if (
         reconciliationNeeded ||
-        recoveryBlocked ||
-        recovery?.outcome === "already_running"
+        recovery.blocked ||
+        recovery.result?.outcome === "already_running"
       ) {
-        return recovery;
+        return recovery.result;
       }
     }
 
-    const settings = await loadSettings();
-    const status = await loadStatus();
+    const settings = await loadSettings({ signal });
+    const status = await loadStatus({ signal });
     if (!settings.enabled) return { status };
 
-    const timezone = clock.timezone ||
-      Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timezone = timezoneAt(clock);
     const local = localParts(now, timezone);
     if (!settings.days.includes(local.weekday) || completedDates.has(local.date)) {
       return { status };
@@ -196,7 +217,7 @@ function createScheduler({
           trigger: "automatic",
           workDate: local.date,
           timezone,
-        }, local.date);
+        }, local.date, signal);
       }
     }
 
@@ -206,52 +227,62 @@ function createScheduler({
       trigger: "automatic",
       workDate: local.date,
       timezone,
-    }, local.date);
+    }, local.date, signal);
   }
 
   function tick(now = clock.now()) {
-    return exclusive(() => evaluate(new Date(now)));
+    return exclusive((signal) => evaluate(new Date(now), signal));
   }
 
   function resume(now = clock.now()) {
-    return exclusive(async () => {
+    return exclusive(async (signal) => {
       reconciliationNeeded = true;
-      const recovery = await reconcile();
+      const recovery = await reconcile(signal);
       if (
         reconciliationNeeded ||
-        recoveryBlocked ||
-        recovery?.outcome === "already_running"
+        recovery.blocked ||
+        recovery.result?.outcome === "already_running"
       ) {
-        return recovery;
+        return recovery.result;
       }
-      return evaluate(new Date(now));
+      return evaluate(new Date(now), signal);
     });
   }
 
   function runNow(now = clock.now()) {
-    return exclusive(() => {
-      const timezone = clock.timezone ||
-        Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return exclusive((signal) => {
+      const timezone = timezoneAt(clock);
       const { date: workDate } = localParts(new Date(now), timezone);
-      return execute({ trigger: "manual", workDate, timezone });
+      return execute({ trigger: "manual", workDate, timezone }, null, signal);
     });
   }
 
-  function stop() {
+  async function stop() {
+    stopped = true;
     if (timer) clock.clearInterval(timer);
     timer = null;
+    const pending = activePromise;
+    if (!pending) return;
+    activeController?.abort(new Error("Scheduler stopped."));
+    let timeout;
+    const bounded = new Promise((resolve) => {
+      timeout = clock.setTimeout(resolve, STOP_TIMEOUT_MS);
+    });
+    await Promise.race([pending.catch(() => {}), bounded]);
+    if (timeout) clock.clearTimeout(timeout);
   }
 
   function start() {
-    return exclusive(async () => {
-      const recovery = await reconcile();
-      let result = recovery;
+    stopped = false;
+    return exclusive(async (signal) => {
+      const recovery = await reconcile(signal);
+      let result = recovery.result;
       if (
         !reconciliationNeeded &&
-        !recoveryBlocked &&
-        recovery?.outcome !== "already_running"
+        !recovery.blocked &&
+        recovery.result?.outcome !== "already_running"
       ) {
-        result = await evaluate(new Date(clock.now()));
+        result = await evaluate(new Date(clock.now()), signal);
       }
       if (!timer) {
         timer = clock.setInterval(() => {
