@@ -48,6 +48,6 @@ test("installer workflows smoke-test unpacked apps before installers", async () 
   }
   assert.match(windowsWorkflow, /win-unpacked[\\/]AI Worklog Agent\.exe/);
   assert.match(macWorkflow, /unpacked_dir: mac-arm64/);
-  assert.match(macWorkflow, /unpacked_dir: mac\n/);
+  assert.match(macWorkflow, /unpacked_dir: mac\r?\n/);
   assert.match(macWorkflow, /matrix\.unpacked_dir/);
 });
