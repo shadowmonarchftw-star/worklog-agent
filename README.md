@@ -18,7 +18,7 @@ local settings.
    failed builds and can be ignored.
 5. Scroll to **Artifacts** and download `AI-Worklog-Agent-Windows`.
 6. Extract the downloaded ZIP.
-7. Run `AI Worklog Agent-Setup-0.1.3.exe`.
+7. Run `AI Worklog Agent-Setup-0.1.4.exe`.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
@@ -78,10 +78,20 @@ To identify the Mac type, open **Apple menu > About This Mac**. A Mac showing
 **Chip: Apple M1/M2/M3/M4** uses `arm64`. A Mac showing **Processor: Intel**
 uses `x64`.
 
-The app is currently unsigned. On first launch, macOS may block it. Control-click
-the app in **Applications**, select **Open**, and confirm **Open**. If that
-option is unavailable, open **System Settings > Privacy & Security** and select
-**Open Anyway** for AI Worklog Agent.
+The app uses an ad-hoc signature but is not Apple-notarized. On first launch,
+macOS may block it. Control-click the app in **Applications**, select **Open**,
+and confirm **Open**. If that option is unavailable, open **System Settings >
+Privacy & Security** and select **Open Anyway** for AI Worklog Agent.
+
+If macOS says the app "is damaged and can't be opened," confirm that it came
+from this repository, then run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/AI Worklog Agent.app"
+```
+
+Control-click the app and select **Open** again. This command removes the
+download quarantine flag from this app only.
 
 No Node.js, Git, Terminal, or `npm` commands are required when using the `.dmg`.
 
@@ -274,7 +284,7 @@ Repository maintainers can create a new installer without a Windows computer:
 6. Open the completed run and download `AI-Worklog-Agent-Windows` under
    **Artifacts**.
 
-Pushing a version tag such as `v0.1.3` also starts the installer workflow.
+Pushing a version tag such as `v0.1.4` also starts the installer workflow.
 
 ## Creating macOS Installers on GitHub
 
