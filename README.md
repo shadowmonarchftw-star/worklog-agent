@@ -18,7 +18,7 @@ local settings.
    failed builds and can be ignored.
 5. Scroll to **Artifacts** and download `AI-Worklog-Agent-Windows`.
 6. Extract the downloaded ZIP.
-7. Run `AI Worklog Agent-Setup-0.1.2.exe`.
+7. Run `AI Worklog Agent-Setup-0.1.3.exe`.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
@@ -62,17 +62,41 @@ npm run desktop
 
 ## macOS Installation
 
-A downloadable macOS `.dmg` is not published yet. For now, run the app from its
-source code.
+### Download the installer
 
-### 1. Install the prerequisites
+1. Open the repository on GitHub.
+2. Select **Actions**.
+3. Select **Build macOS Installers** in the left sidebar.
+4. Open the newest workflow run with a green check mark.
+5. Scroll to **Artifacts** and download the correct file:
+   - `AI-Worklog-Agent-macOS-arm64` for Apple Silicon Macs.
+   - `AI-Worklog-Agent-macOS-x64` for Intel Macs.
+6. Extract the downloaded ZIP and open the `.dmg`.
+7. Drag **AI Worklog Agent** into **Applications**.
+
+To identify the Mac type, open **Apple menu > About This Mac**. A Mac showing
+**Chip: Apple M1/M2/M3/M4** uses `arm64`. A Mac showing **Processor: Intel**
+uses `x64`.
+
+The app is currently unsigned. On first launch, macOS may block it. Control-click
+the app in **Applications**, select **Open**, and confirm **Open**. If that
+option is unavailable, open **System Settings > Privacy & Security** and select
+**Open Anyway** for AI Worklog Agent.
+
+No Node.js, Git, Terminal, or `npm` commands are required when using the `.dmg`.
+
+### Developer fallback: install from source
+
+Use this only when a macOS installer artifact is unavailable.
+
+#### 1. Install the prerequisites
 
 Install:
 
 - [Node.js LTS](https://nodejs.org/)
 - [Git](https://git-scm.com/download/mac)
 
-### 2. Download and start the app
+#### 2. Download and start the app
 
 Open Terminal and run:
 
@@ -232,6 +256,12 @@ npm run dist:win
 
 The installer is written to the `release` folder.
 
+Build a macOS `.dmg` on a Mac:
+
+```bash
+npm run dist:mac
+```
+
 ## Creating a Windows Installer on GitHub
 
 Repository maintainers can create a new installer without a Windows computer:
@@ -244,4 +274,16 @@ Repository maintainers can create a new installer without a Windows computer:
 6. Open the completed run and download `AI-Worklog-Agent-Windows` under
    **Artifacts**.
 
-Pushing a version tag such as `v0.1.2` also starts the installer workflow.
+Pushing a version tag such as `v0.1.3` also starts the installer workflow.
+
+## Creating macOS Installers on GitHub
+
+1. Open the repository on GitHub.
+2. Select **Actions**.
+3. Select **Build macOS Installers**.
+4. Click **Run workflow** and choose the `master` branch.
+5. Wait for both Apple Silicon and Intel jobs to finish.
+6. Download both macOS artifacts and share the one matching the colleague's
+   Mac.
+
+Pushing a version tag also starts both Windows and macOS installer workflows.
