@@ -151,6 +151,57 @@ test("owner loss at a boundary prevents the next external side effect", async ()
   assert.deepEqual(h.calls, ["claim", "github", "release"]);
 });
 
+test("lease loss aborts every in-flight provider request and starts no later effect", async () => {
+  for (const stage of ["github", "gemini", "read-row", "write"]) {
+    const h = harness({ renewalIntervalMs: 1 });
+    let renewals = 0;
+    const preflightRenewals = {
+      github: 1,
+      gemini: 2,
+      "read-row": 4,
+      write: 5,
+    }[stage];
+    h.args.lease.renew = async () => ++renewals <= preflightRenewals;
+    const aborting = (name) => async ({ signal }) => {
+      h.calls.push(name);
+      assert.ok(signal, `${stage} receives a signal`);
+      return new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    };
+    if (stage === "github") {
+      h.args.providers.github.collectActivity = aborting("github");
+    } else if (stage === "gemini") {
+      h.args.providers.gemini.generateSummary = aborting("gemini");
+    } else if (stage === "read-row") {
+      h.args.providers.sheets.readRow = aborting("read-row");
+    } else {
+      h.args.providers.sheets.upsertRow = aborting("write");
+    }
+
+    await assert.rejects(() => executeWorklog(h.args), /lease ownership/i, stage);
+    assert.equal(h.calls.at(-1), "release", stage);
+    assert.equal(h.calls.includes("complete-failed"), false, stage);
+    const started = h.calls.indexOf(stage);
+    const laterExternal = ["github", "gemini", "read-row", "write"]
+      .slice(["github", "gemini", "read-row", "write"].indexOf(stage) + 1);
+    assert.equal(
+      h.calls.slice(started + 1).some((call) => laterExternal.includes(call)),
+      false,
+      stage,
+    );
+  }
+});
+
+test("lease is revalidated immediately before history persistence", async () => {
+  const h = harness();
+  let renewals = 0;
+  h.args.lease.renew = async () => ++renewals < 3;
+
+  await assert.rejects(() => executeWorklog(h.args), /lease ownership/i);
+  assert.deepEqual(h.calls, ["claim", "github", "gemini", "release"]);
+});
+
 test("recovery accepts exact intended row and restores missing history", async () => {
   const calls = [];
   const attempt = {
@@ -219,7 +270,12 @@ test("recovery marks absent or unchanged prewrite rows for retry", async () => {
 test("recovery detects a different sheet row as conflict without writing", async () => {
   let writes = 0;
   const completions = [];
-  const attempt = { id: "a", intendedRow: intended, preWriteRowHash: "row_absent" };
+  const attempt = {
+    id: "a",
+    intendedRow: intended,
+    intendedRowHash: rowHash(intended),
+    preWriteRowHash: "row_absent",
+  };
   await recoverInterruptedRuns({
     ownerId: "r",
     lease: {
@@ -244,6 +300,39 @@ test("recovery detects a different sheet row as conflict without writing", async
   });
   assert.equal(writes, 0);
   assert.equal(completions[0].errorCategory, "sheet_conflict");
+});
+
+test("recovery before intent or prewrite checkpoint is retryable without reading the sheet", async () => {
+  for (const evidence of [
+    { intendedRow: null, intendedRowHash: null, preWriteRowHash: null },
+    { intendedRow: intended, intendedRowHash: rowHash(intended), preWriteRowHash: null },
+  ]) {
+    let reads = 0;
+    const completions = [];
+    const attempt = { id: "crashed", workDate: "2026-07-30", ...evidence };
+    const result = await recoverInterruptedRuns({
+      ownerId: "recovery",
+      lease: {
+        interruptStale: async () => {},
+        listInterrupted: async () => [attempt],
+        claimRecovery: async () => ({ outcome: "claimed", attempt }),
+        renew: async () => true,
+        release: async () => {},
+      },
+      store: {
+        complete: async (value) => completions.push(value),
+        cleanup: async () => {},
+      },
+      providers: {
+        sheets: { readRow: async () => (reads++, null) },
+      },
+      settings,
+      tokens,
+    });
+    assert.equal(reads, 0);
+    assert.equal(completions[0].errorCategory, "retry");
+    assert.equal(result[0].retry, true);
+  }
 });
 
 test("recovery cleans up exactly once and preserves every reconciliation error", async () => {
@@ -292,4 +381,27 @@ test("recovery cleans up exactly once and preserves every reconciliation error",
     );
     assert.equal(cleanupCalls, 1, failurePoint);
   }
+});
+
+test("cleanup failure after successful recovery returns a maintenance warning", async () => {
+  const cleanupError = new Error("cleanup unavailable");
+  const result = await recoverInterruptedRuns({
+    ownerId: "recovery",
+    lease: {
+      interruptStale: async () => {},
+      listInterrupted: async () => [],
+    },
+    store: {
+      cleanup: async () => {
+        throw cleanupError;
+      },
+    },
+    providers: {},
+    settings,
+    tokens,
+  });
+
+  assert.deepEqual(result, []);
+  assert.equal(result.maintenanceWarning.error, cleanupError);
+  assert.match(result.maintenanceWarning.message, /cleanup unavailable/);
 });
