@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { getServerConfig } = require("../electron/app-server.cjs");
+const { getServerConfig, startAppServer } = require("../electron/app-server.cjs");
 
 test("uses an externally supplied app URL without starting a server", () => {
   assert.deepEqual(
@@ -66,4 +66,52 @@ test("uses an isolated port when configured for packaged smoke tests", async () 
   assert.equal(config.url, "http://127.0.0.1:31888");
   if (originalPort === undefined) delete process.env.WORKLOG_AGENT_PORT;
   else process.env.WORKLOG_AGENT_PORT = originalPort;
+});
+
+test("runs the packaged server as a background utility process", async () => {
+  const calls = [];
+  let stopped = false;
+  const utilityProcess = {
+    kill() {
+      stopped = true;
+    },
+  };
+
+  const server = await startAppServer(
+    {
+      appPath: "/Applications/AI Worklog Agent.app/Contents/Resources/server",
+      hostname: "127.0.0.1",
+      mode: "standalone",
+      port: 31888,
+      serverPath:
+        "/Applications/AI Worklog Agent.app/Contents/Resources/server/server.js",
+      url: "http://127.0.0.1:31888",
+    },
+    {
+      isReady: async () => false,
+      forkUtility: (...args) => {
+        calls.push(args);
+        return utilityProcess;
+      },
+    },
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0][0],
+    "/Applications/AI Worklog Agent.app/Contents/Resources/server/server.js",
+  );
+  assert.deepEqual(calls[0][1], []);
+  assert.equal(
+    calls[0][2].cwd,
+    "/Applications/AI Worklog Agent.app/Contents/Resources/server",
+  );
+  assert.equal(calls[0][2].env.HOSTNAME, "127.0.0.1");
+  assert.equal(calls[0][2].env.PORT, "31888");
+  assert.equal(calls[0][2].serviceName, "AI Worklog Agent Server");
+  assert.equal(calls[0][2].stdio, "inherit");
+  assert.equal(calls[0][2].env.ELECTRON_RUN_AS_NODE, undefined);
+
+  await server.stop();
+  assert.equal(stopped, true);
 });

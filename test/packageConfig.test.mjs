@@ -30,6 +30,8 @@ test("packages only Electron code and copies the standalone server as a resource
     },
   ]);
   assert.equal(packageJson.build.compression, "maximum");
+  assert.equal(packageJson.build.mac.icon, "build/icon.png");
+  assert.equal(packageJson.build.win.icon, "build/icon.png");
   assert.equal(
     packageJson.scripts.build,
     "next build && node scripts/prepare-standalone.cjs",

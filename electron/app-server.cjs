@@ -44,8 +44,10 @@ async function isAppReady(url) {
   }
 }
 
-async function startAppServer(config) {
-  if (config.mode === "external" || (await isAppReady(config.url))) {
+async function startAppServer(config, dependencies = {}) {
+  const isReady = dependencies.isReady || isAppReady;
+
+  if (config.mode === "external" || (await isReady(config.url))) {
     return {
       stop: async () => {},
       url: config.url,
@@ -66,14 +68,18 @@ async function startAppServer(config) {
   }
 
   if (config.mode === "standalone") {
-    const child = spawn(process.execPath, [config.serverPath], {
+    if (!dependencies.forkUtility) {
+      throw new Error("A utility process launcher is required for the packaged server.");
+    }
+
+    const child = dependencies.forkUtility(config.serverPath, [], {
       cwd: config.appPath,
       env: {
         ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
         HOSTNAME: config.hostname,
         PORT: String(config.port),
       },
+      serviceName: "AI Worklog Agent Server",
       stdio: "inherit",
     });
 

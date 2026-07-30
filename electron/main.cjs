@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, utilityProcess } = require("electron");
 const { getServerConfig, startAppServer, waitForAppUrl } = require("./app-server.cjs");
 const { registerExternalLinkHandler } = require("./external-links.cjs");
 
@@ -31,7 +31,10 @@ app.whenReady().then(async () => {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
   });
-  appServer = await startAppServer(serverConfig);
+  appServer = await startAppServer(serverConfig, {
+    forkUtility: (modulePath, args, options) =>
+      utilityProcess.fork(modulePath, args, options),
+  });
   appUrl = appServer.url;
   await createWindow();
 
