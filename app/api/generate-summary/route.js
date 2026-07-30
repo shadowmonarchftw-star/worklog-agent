@@ -1,9 +1,8 @@
-import { buildSummaryPrompt, cleanSummaryText } from "../../../lib/summaryPrompt.mjs";
+import { generateGeminiSummary } from "../../../lib/geminiProvider.mjs";
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const prompt = buildSummaryPrompt(body);
     const geminiApiKey = body.geminiApiKey?.trim() || process.env.GEMINI_API_KEY;
 
     if (!geminiApiKey) {
@@ -16,74 +15,15 @@ export async function POST(request) {
       );
     }
 
-    const models = [
-      process.env.GEMINI_MODEL,
-      "gemini-3.6-flash",
-      "gemini-3.5-flash",
-      "gemini-flash-latest",
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-    ].filter(Boolean);
-
-    let response;
-    let errorText = "";
-    let usedModel = "";
-
-    for (const model of models) {
-      usedModel = model;
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "x-goog-api-key": geminiApiKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: prompt.system }],
-            },
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: prompt.user }],
-              },
-            ],
-          }),
-        },
-      );
-
-      if (response.ok) {
-        break;
-      }
-
-      errorText = await response.text();
-      if (![429, 503].includes(response.status)) {
-        break;
-      }
-    }
-
-    if (!response?.ok) {
-      return Response.json(
-        { error: `Gemini request failed: ${errorText}` },
-        { status: 502 },
-      );
-    }
-
-    const data = await response.json();
-    const summary = data.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text)
-      ?.filter(Boolean)
-      ?.join("\n")
-      ?.trim();
-
-    return Response.json({
-      summary: summary
-        ? cleanSummaryText(summary, { preserveBullets: body.style === "bullet-points" })
-        : "No summary returned.",
-      model: usedModel,
-    });
+    return Response.json(await generateGeminiSummary({
+      apiKey: geminiApiKey,
+      workDate: body.workDate,
+      style: body.style,
+      activity: body.activity,
+      model: process.env.GEMINI_MODEL,
+    }));
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 400 });
+    const status = error.category === "gemini" ? 502 : 400;
+    return Response.json({ error: error.safeMessage || error.message }, { status });
   }
 }
