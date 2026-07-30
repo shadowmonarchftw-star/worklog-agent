@@ -216,6 +216,52 @@ test("recovery failure blocks a run, sanitizes notification, and retries next ti
   assert.equal(calls.run.length, 1);
 });
 
+test("serializable failed recovery notifies and blocks same-wake catch-up", async () => {
+  const { calls, scheduler } = harness({
+    clock: fakeClock("2026-07-30T18:00:00+05:45"),
+    recover: async () => ({
+      results: [{
+        id: "attempt-1",
+        status: "failed",
+        errorCategory: "sheet_conflict",
+        errorMessage:
+          "Row changed token=private-value ghp_abcdefghijklmnopqrstuvwxyz123456",
+      }],
+      maintenanceWarning: null,
+    }),
+  });
+
+  const result = await scheduler.start();
+
+  assert.equal(calls.run.length, 0);
+  assert.equal(result.results[0].errorCategory, "sheet_conflict");
+  assert.deepEqual(calls.notify, [{
+    title: "Worklog recovery needs attention",
+    body: "Row changed token=[REDACTED] [REDACTED]",
+  }]);
+  scheduler.stop();
+});
+
+test("recovery maintenance warnings produce a sanitized native notification", async () => {
+  const { calls, scheduler } = harness({
+    recover: async () => ({
+      results: [],
+      maintenanceWarning: {
+        category: "maintenance",
+        safeMessage: "Cleanup failed Authorization: Bearer private-value",
+      },
+    }),
+  });
+
+  await scheduler.start();
+
+  assert.deepEqual(calls.notify, [{
+    title: "Worklog maintenance warning",
+    body: "Cleanup failed Authorization: [REDACTED]",
+  }]);
+  scheduler.stop();
+});
+
 test("maps run outcomes to concise notifications", async () => {
   const cases = [
     [

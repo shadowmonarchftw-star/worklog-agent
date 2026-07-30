@@ -126,7 +126,8 @@ test("no activity calls neither Gemini nor Sheets", async () => {
 });
 
 test("provider failure persists only typed safe error and releases", async () => {
-  const h = harness();
+  const completions = [];
+  const h = harness({ now: new Date("2026-07-30T12:00:00.000Z") });
   h.args.providers.github.collectActivity = async () => {
     h.calls.push("github");
     throw new ProviderError("github", "GitHub activity is unavailable.", {
@@ -135,12 +136,33 @@ test("provider failure persists only typed safe error and releases", async () =>
   };
   h.args.store.complete = async (value) => {
     h.calls.push("complete-failed");
+    completions.push(value);
     assert.equal(value.errorCategory, "github");
     assert.equal(value.errorMessage, "GitHub activity is unavailable.");
     assert.equal(JSON.stringify(value).includes("ghp_"), false);
   };
   await assert.rejects(() => executeWorklog(h.args), /unavailable/);
   assert.deepEqual(h.calls, ["claim", "github", "complete-failed", "release"]);
+  assert.equal(
+    completions[0].retryDueAt,
+    "2026-07-30T12:15:00.000Z",
+  );
+});
+
+test("manual failures do not request an automatic retry", async () => {
+  const completions = [];
+  const h = harness({
+    trigger: "manual",
+    now: new Date("2026-07-30T12:00:00.000Z"),
+  });
+  h.args.providers.github.collectActivity = async () => {
+    throw new Error("manual failure");
+  };
+  h.args.store.complete = async (value) => completions.push(value);
+
+  await assert.rejects(() => executeWorklog(h.args), /manual failure/);
+
+  assert.equal(completions[0].retryDueAt, undefined);
 });
 
 test("owner loss at a boundary prevents the next external side effect", async () => {
@@ -292,6 +314,7 @@ test("recovery marks absent or unchanged prewrite rows for retry", async () => {
     const attempt = { id: "a", intendedRow: intended, preWriteRowHash };
     await recoverInterruptedRuns({
       ownerId: "r",
+      now: new Date("2026-07-30T12:00:00.000Z"),
       lease: {
         interruptStale: async () => {},
         listInterrupted: async () => [attempt],
@@ -309,7 +332,10 @@ test("recovery marks absent or unchanged prewrite rows for retry", async () => {
     });
     assert.equal(completions[0].status, "failed");
     assert.equal(completions[0].errorCategory, "retry");
-    assert.ok(completions[0].retryDueAt);
+    assert.equal(
+      completions[0].retryDueAt,
+      "2026-07-30T12:15:00.000Z",
+    );
   }
 });
 

@@ -43,6 +43,7 @@ function sanitize(value) {
       /\b(token|key|secret|password|credential)\s*=\s*[^\s,;]+/gi,
       "$1=[REDACTED]",
     )
+    .replace(/\bgh[oprsu]_[A-Za-z0-9_]{16,}\b/g, "[REDACTED]")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 240) || "Automation failed.";
@@ -77,6 +78,7 @@ function createScheduler({
   let timer = null;
   let active = false;
   let reconciliationNeeded = true;
+  let recoveryBlocked = false;
   const completedDates = new Set();
 
   async function exclusive(operation) {
@@ -95,9 +97,31 @@ function createScheduler({
       if (result?.outcome === "already_running") {
         return result;
       }
+      const failed = Array.isArray(result?.results)
+        ? result.results.filter((entry) => entry?.status === "failed")
+        : [];
+      for (const entry of failed) {
+        notify({
+          title: entry.errorCategory === "sheet_conflict"
+            ? "Worklog recovery needs attention"
+            : "Worklog recovery failed",
+          body: sanitize(entry.errorMessage || "Worklog recovery failed."),
+        });
+      }
+      if (result?.maintenanceWarning) {
+        notify({
+          title: "Worklog maintenance warning",
+          body: sanitize(
+            result.maintenanceWarning.safeMessage ||
+              "Automation cleanup failed.",
+          ),
+        });
+      }
+      recoveryBlocked = failed.length > 0;
       reconciliationNeeded = false;
       return result;
     } catch (error) {
+      recoveryBlocked = true;
       reconciliationNeeded = true;
       notify({
         title: "Worklog recovery failed",
@@ -133,7 +157,11 @@ function createScheduler({
   async function evaluate(now) {
     if (reconciliationNeeded) {
       const recovery = await reconcile();
-      if (reconciliationNeeded || recovery?.outcome === "already_running") {
+      if (
+        reconciliationNeeded ||
+        recoveryBlocked ||
+        recovery?.outcome === "already_running"
+      ) {
         return recovery;
       }
     }
@@ -186,7 +214,11 @@ function createScheduler({
     return exclusive(async () => {
       reconciliationNeeded = true;
       const recovery = await reconcile();
-      if (reconciliationNeeded || recovery?.outcome === "already_running") {
+      if (
+        reconciliationNeeded ||
+        recoveryBlocked ||
+        recovery?.outcome === "already_running"
+      ) {
         return recovery;
       }
       return evaluate(new Date(now));
@@ -211,7 +243,11 @@ function createScheduler({
     return exclusive(async () => {
       const recovery = await reconcile();
       let result = recovery;
-      if (!reconciliationNeeded && recovery?.outcome !== "already_running") {
+      if (
+        !reconciliationNeeded &&
+        !recoveryBlocked &&
+        recovery?.outcome !== "already_running"
+      ) {
         result = await evaluate(new Date(clock.now()));
       }
       if (!timer) {

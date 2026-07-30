@@ -569,6 +569,68 @@ test("a failed automatic retry closes the day as terminal failure", () => {
   assert.equal(day.completed_at, "2026-07-30T10:03:00.000Z");
 });
 
+test("store keeps retry due only for the first automatic failure", () => {
+  const { first: db } = tempDbHandles();
+  const initial = claimAutomationAttempt(db, {
+    workDate: "2026-07-30",
+    trigger: "automatic",
+    ownerId: "owner-1",
+    now: "2026-07-30T12:00:00.000Z",
+    ...CLAIM_WINDOW,
+  });
+  const failedFirst = transitionAutomationAttempt(db, {
+    attemptId: initial.attempt.id,
+    ownerId: "owner-1",
+    to: "failed",
+    now: "2026-07-30T12:00:00.000Z",
+    retryDueAt: "2026-07-30T12:15:00.000Z",
+  });
+  assert.equal(failedFirst.retryDueAt, "2026-07-30T12:15:00.000Z");
+
+  const second = claimAutomationAttempt(db, {
+    workDate: "2026-07-30",
+    trigger: "automatic",
+    ownerId: "owner-2",
+    now: "2026-07-30T12:15:00.000Z",
+    ...CLAIM_WINDOW,
+  });
+  const failedSecond = transitionAutomationAttempt(db, {
+    attemptId: second.attempt.id,
+    ownerId: "owner-2",
+    to: "failed",
+    now: "2026-07-30T12:15:00.000Z",
+    retryDueAt: "2026-07-30T12:30:00.000Z",
+  });
+  const day = db.prepare(
+    "SELECT terminal_outcome FROM automation_days WHERE work_date = ?",
+  ).get("2026-07-30");
+
+  assert.equal(failedSecond.retryDueAt, null);
+  assert.equal(day.terminal_outcome, "failed");
+  db.close();
+});
+
+test("store discards retry due time for manual failures", () => {
+  const { first: db } = tempDbHandles();
+  const claimed = claimAutomationAttempt(db, {
+    workDate: "2026-07-30",
+    trigger: "manual",
+    ownerId: "owner-1",
+    now: "2026-07-30T12:00:00.000Z",
+    ...CLAIM_WINDOW,
+  });
+  const failed = transitionAutomationAttempt(db, {
+    attemptId: claimed.attempt.id,
+    ownerId: "owner-1",
+    to: "failed",
+    now: "2026-07-30T12:00:00.000Z",
+    retryDueAt: "2026-07-30T12:15:00.000Z",
+  });
+
+  assert.equal(failed.retryDueAt, null);
+  db.close();
+});
+
 test("running checkpoints persist immutable intent and prewrite evidence", () => {
   const { first } = tempDbHandles();
   const started = claim(first);
