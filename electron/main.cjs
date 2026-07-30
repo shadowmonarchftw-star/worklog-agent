@@ -20,7 +20,7 @@ async function createWindow() {
 
   registerExternalLinkHandler(window, (url) => shell.openExternal(url));
 
-  await waitForAppUrl(appUrl);
+  await waitForAppUrl(appUrl, appServer);
   await window.loadURL(appUrl);
 }
 

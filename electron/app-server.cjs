@@ -1,21 +1,48 @@
 const http = require("node:http");
 const { spawn } = require("node:child_process");
+const { createHash, randomBytes, timingSafeEqual } = require("node:crypto");
 const path = require("node:path");
 
 const defaultHostname = "127.0.0.1";
 
-function getServerConfig({ externalUrl, isPackaged, appPath, resourcesPath }) {
+function launchSecret() {
+  return randomBytes(32).toString("base64url");
+}
+
+function launchIdentity(nonce) {
+  return createHash("sha256")
+    .update(`ai-worklog-agent:${String(nonce || "")}`)
+    .digest("hex");
+}
+
+function safeIdentityEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  return leftBuffer.length === rightBuffer.length &&
+    timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function getServerConfig(
+  { externalUrl, isPackaged, appPath, resourcesPath },
+  credentials = {},
+) {
   if (externalUrl) {
     return {
+      automationAvailable: false,
       mode: "external",
       url: externalUrl,
     };
   }
 
+  const capability = credentials.capability || launchSecret();
+  const launchNonce = credentials.launchNonce || launchSecret();
   const port = Number(process.env.WORKLOG_AGENT_PORT || 3000);
   const baseConfig = {
     appPath,
+    automationAvailable: true,
+    capability,
     hostname: defaultHostname,
+    launchNonce,
     mode: "development",
     port,
     url: `http://${defaultHostname}:${port}`,
@@ -35,10 +62,22 @@ function getServerConfig({ externalUrl, isPackaged, appPath, resourcesPath }) {
   };
 }
 
-async function isAppReady(url) {
+async function isAppReady(
+  url,
+  {
+    capability,
+    launchNonce,
+    fetchImpl = fetch,
+  } = {},
+) {
+  if (!capability || !launchNonce) return false;
   try {
-    const response = await fetch(`${url}/api/google/status`);
-    return response.ok;
+    const response = await fetchImpl(`${url}/api/automation/identity`, {
+      headers: { Authorization: `Bearer ${capability}` },
+    });
+    if (!response.ok) return false;
+    const body = await response.json();
+    return safeIdentityEqual(body.identity, launchIdentity(launchNonce));
   } catch {
     return false;
   }
@@ -46,22 +85,34 @@ async function isAppReady(url) {
 
 async function startAppServer(config, dependencies = {}) {
   const isReady = dependencies.isReady || isAppReady;
+  const spawnProcess = dependencies.spawnProcess || spawn;
 
-  if (config.mode === "external" || (await isReady(config.url))) {
+  if (config.mode === "external" || (await isReady(config.url, config))) {
     return {
+      automationAvailable: config.automationAvailable,
+      capability: config.capability,
+      launchNonce: config.launchNonce,
       stop: async () => {},
       url: config.url,
     };
   }
 
   if (config.mode === "development") {
-    const child = spawn("npm", ["run", "dev"], {
+    const child = spawnProcess("npm", ["run", "dev"], {
       cwd: config.appPath,
+      env: {
+        ...process.env,
+        AUTOMATION_CAPABILITY: config.capability,
+        AUTOMATION_LAUNCH_NONCE: config.launchNonce,
+      },
       shell: process.platform === "win32",
       stdio: "inherit",
     });
 
     return {
+      automationAvailable: config.automationAvailable,
+      capability: config.capability,
+      launchNonce: config.launchNonce,
       stop: async () => child.kill(),
       url: config.url,
     };
@@ -76,6 +127,8 @@ async function startAppServer(config, dependencies = {}) {
       cwd: config.appPath,
       env: {
         ...process.env,
+        AUTOMATION_CAPABILITY: config.capability,
+        AUTOMATION_LAUNCH_NONCE: config.launchNonce,
         HOSTNAME: config.hostname,
         PORT: String(config.port),
       },
@@ -84,6 +137,9 @@ async function startAppServer(config, dependencies = {}) {
     });
 
     return {
+      automationAvailable: config.automationAvailable,
+      capability: config.capability,
+      launchNonce: config.launchNonce,
       stop: async () => child.kill(),
       url: config.url,
     };
@@ -109,6 +165,9 @@ async function startAppServer(config, dependencies = {}) {
   });
 
   return {
+    automationAvailable: config.automationAvailable,
+    capability: config.capability,
+    launchNonce: config.launchNonce,
     stop: () =>
       new Promise((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
@@ -117,9 +176,20 @@ async function startAppServer(config, dependencies = {}) {
   };
 }
 
-async function waitForAppUrl(url) {
+async function isUiReady(url) {
+  try {
+    return (await fetch(url)).ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForAppUrl(url, launch = {}) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (await isAppReady(url)) {
+    const ready = launch.automationAvailable === false
+      ? await isUiReady(url)
+      : await isAppReady(url, launch);
+    if (ready) {
       return;
     }
 
@@ -131,6 +201,7 @@ async function waitForAppUrl(url) {
 
 module.exports = {
   getServerConfig,
+  isAppReady,
   startAppServer,
   waitForAppUrl,
 };
