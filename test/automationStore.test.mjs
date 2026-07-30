@@ -3,9 +3,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { Worker } from "node:worker_threads";
 
 import {
   AUTOMATION_SETTINGS_DEFAULTS,
+  checkpointAutomationHistory,
   checkpointAutomationIntent,
   checkpointAutomationPreWrite,
   claimAutomationAttempt,
@@ -35,6 +37,14 @@ function tempDbHandles() {
     first: createLocalDb(dbPath),
     second: createLocalDb(dbPath),
   };
+}
+
+function insertHistory(db, id) {
+  db.prepare(
+    `INSERT INTO history
+      (id, developer_name, work_date, style, repos, activity, summary, created_at)
+     VALUES (?, '', ?, 'standup', '[]', 'activity', 'summary', ?)`,
+  ).run(id, `2026-07-${id === "history-1" ? "30" : "31"}`, T0);
 }
 
 function claim(db, overrides = {}) {
@@ -169,26 +179,65 @@ test("success and no activity close a day while failure leaves it retryable", ()
   }
 });
 
-test("Promise.allSettled claims through two handles leave exactly one active attempt", async () => {
+test("two worker threads race separate handles and only one claim acquires the lease", async () => {
   const { first, second } = tempDbHandles();
-  const results = await Promise.allSettled([
-    Promise.resolve().then(() =>
-      claim(first, { trigger: "automatic", ownerId: "runner-a" }),
-    ),
-    Promise.resolve().then(() =>
-      claim(second, { trigger: "automatic", ownerId: "runner-b" }),
-    ),
-  ]);
+  const dbPath = first.name;
+  first.close();
+  second.close();
+  const startSignal = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
+  const workers = ["runner-a", "runner-b"].map(
+    (ownerId) =>
+      new Worker(new URL("./fixtures/automationClaimWorker.mjs", import.meta.url), {
+        workerData: { dbPath, ownerId, startSignal },
+      }),
+  );
+  const ready = workers.map(
+    (worker) =>
+      new Promise((resolve, reject) => {
+        const onMessage = (message) => {
+          if (message.type === "ready") {
+            worker.off("message", onMessage);
+            resolve();
+          }
+        };
+        worker.on("message", onMessage);
+        worker.once("error", reject);
+      }),
+  );
+  const claimResults = workers.map(
+    (worker) =>
+      new Promise((resolve, reject) => {
+        const onMessage = (message) => {
+          if (message.type === "result") {
+            worker.off("message", onMessage);
+            resolve(message.claim);
+          }
+        };
+        worker.on("message", onMessage);
+        worker.once("error", reject);
+      }),
+  );
+  await Promise.all(ready);
+  Atomics.store(new Int32Array(startSignal), 0, 1);
+  Atomics.notify(new Int32Array(startSignal), 0, workers.length);
+  const claims = await Promise.all(claimResults);
 
-  assert.deepEqual(results.map(({ status }) => status), ["fulfilled", "fulfilled"]);
   assert.deepEqual(
-    results.map(({ value }) => value.outcome).sort(),
+    claims.map(({ outcome }) => outcome).sort(),
     ["already_running", "claimed"],
   );
+  const verificationDb = createLocalDb(dbPath);
   assert.equal(
-    first.prepare(
+    verificationDb.prepare(
       "SELECT COUNT(*) AS count FROM automation_attempts WHERE status = 'running'",
     ).get().count,
+    1,
+  );
+  assert.equal(
+    verificationDb.prepare(
+      `SELECT COUNT(*) AS count FROM automation_lease
+       WHERE attempt_id IS NOT NULL AND expires_at > ?`,
+    ).get(T0).count,
     1,
   );
 });
@@ -407,6 +456,108 @@ test("checkpoints require running owner and prewrite requires intended row", () 
       }),
     /owner/,
   );
+});
+
+test("history checkpoint is running-owner checked, immutable, and idempotent", () => {
+  const { first } = tempDbHandles();
+  insertHistory(first, "history-1");
+  insertHistory(first, "history-2");
+  const started = claim(first);
+
+  const checkpointed = checkpointAutomationHistory(first, {
+    attemptId: started.attempt.id,
+    ownerId: "runner",
+    historyId: "history-1",
+    now: "2026-07-30T10:01:00.000Z",
+  });
+  assert.equal(checkpointed.historyId, "history-1");
+  assert.equal(
+    checkpointAutomationHistory(first, {
+      attemptId: started.attempt.id,
+      ownerId: "runner",
+      historyId: "history-1",
+      now: "2026-07-30T10:01:01.000Z",
+    }).historyId,
+    "history-1",
+  );
+  assert.throws(
+    () =>
+      checkpointAutomationHistory(first, {
+        attemptId: started.attempt.id,
+        ownerId: "runner",
+        historyId: "history-2",
+        now: "2026-07-30T10:01:02.000Z",
+      }),
+    /immutable/,
+  );
+  assert.throws(
+    () =>
+      checkpointAutomationHistory(first, {
+        attemptId: started.attempt.id,
+        ownerId: "wrong",
+        historyId: "history-1",
+        now: "2026-07-30T10:01:03.000Z",
+      }),
+    /owner/,
+  );
+});
+
+test("audit fields reject replacement and allow idempotent interrupted recovery", () => {
+  const { first } = tempDbHandles();
+  insertHistory(first, "history-1");
+  insertHistory(first, "history-2");
+  const started = claim(first);
+  checkpointAutomationHistory(first, {
+    attemptId: started.attempt.id,
+    ownerId: "runner",
+    historyId: "history-1",
+    now: "2026-07-30T10:01:00.000Z",
+  });
+  first.prepare(
+    `UPDATE automation_attempts SET
+      status = 'interrupted',
+      retry_due_at = ?,
+      sheet_action = 'append',
+      sheet_row = 14,
+      completed_at = ?
+     WHERE id = ?`,
+  ).run(
+    "2026-07-30T10:10:00.000Z",
+    "2026-07-30T10:31:00.000Z",
+    started.attempt.id,
+  );
+
+  for (const conflicting of [
+    { historyId: "history-2" },
+    { retryDueAt: "2026-07-30T10:11:00.000Z" },
+    { sheetAction: "update" },
+    { sheetRow: 15 },
+  ]) {
+    assert.throws(
+      () =>
+        transitionAutomationAttempt(first, {
+          attemptId: started.attempt.id,
+          to: "success",
+          now: "2026-07-30T10:32:00.000Z",
+          ...conflicting,
+        }),
+      /immutable/,
+    );
+  }
+
+  const recovered = transitionAutomationAttempt(first, {
+    attemptId: started.attempt.id,
+    to: "success",
+    now: "2026-07-30T10:32:00.000Z",
+    historyId: "history-1",
+    retryDueAt: "2026-07-30T10:10:00.000Z",
+    sheetAction: "append",
+    sheetRow: 14,
+  });
+  assert.equal(recovered.historyId, "history-1");
+  assert.equal(recovered.retryDueAt, "2026-07-30T10:10:00.000Z");
+  assert.equal(recovered.sheetAction, "append");
+  assert.equal(recovered.sheetRow, 14);
 });
 
 test("full transition matrix accepts only running terminals and recovery outcomes", () => {
