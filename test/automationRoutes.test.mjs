@@ -120,8 +120,10 @@ test("run route rejects malformed JSON without loading or executing", async () =
     token: capability,
     rawBody: "{not-json",
   }));
+  const responseBody = await response.json();
 
   assert.equal(response.status, 400);
+  assert.deepEqual(responseBody, { error: "Malformed JSON request body." });
   assert.equal(loadCalls, 0);
   assert.equal(executeCalls, 0);
 });
@@ -248,10 +250,13 @@ test("recover route shares sanitized error and conflict classification", async (
   const cases = [
     {
       recover: async () => {
-        throw new SyntaxError("Recovery input is invalid.");
+        throw new SyntaxError(
+          "Unexpected token in persisted JSON secret-parser-detail",
+        );
       },
-      status: 400,
-      message: /Recovery input is invalid/,
+      status: 500,
+      message: /Recovery failed/,
+      absent: /Unexpected token|secret-parser-detail/,
     },
     {
       recover: async () => {

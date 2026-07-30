@@ -15,6 +15,7 @@ import { authorizeAutomationRequest } from "../../../../lib/automationAuth.mjs";
 import {
   automationErrorResponse,
   automationResultResponse,
+  ValidationError,
 } from "../../../../lib/automationHttp.mjs";
 import { geminiProvider } from "../../../../lib/geminiProvider.mjs";
 import { githubProvider } from "../../../../lib/githubProvider.mjs";
@@ -173,8 +174,10 @@ export function createRunHandler({
     let body;
     try {
       body = await request.json();
-    } catch (error) {
-      return automationErrorResponse(error);
+    } catch {
+      return automationErrorResponse(
+        new ValidationError("Malformed JSON request body."),
+      );
     }
     try {
       return automationResultResponse(await execute(await loadInput(body)));
