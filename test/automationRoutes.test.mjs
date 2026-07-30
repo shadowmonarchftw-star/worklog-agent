@@ -8,6 +8,8 @@ import {
   createSettingsHandlers,
 } from "../app/api/automation/settings/route.js";
 import { launchIdentity } from "../lib/automationAuth.mjs";
+import { ProviderError } from "../lib/providerError.mjs";
+import { AutomationSetupError } from "../lib/worklogService.mjs";
 
 const capability = "route-capability";
 const baseUrl = "http://127.0.0.1:3000";
@@ -17,6 +19,7 @@ function apiRequest(path, {
   host = "127.0.0.1:3000",
   method = "POST",
   origin,
+  rawBody,
   token,
 } = {}) {
   const headers = new Headers({ host });
@@ -26,7 +29,7 @@ function apiRequest(path, {
   return new Request(`${baseUrl}${path}`, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
   });
 }
 
@@ -99,6 +102,48 @@ test("run route executes a valid manual worklog", async () => {
   }]);
 });
 
+test("run route rejects malformed JSON without loading or executing", async () => {
+  let loadCalls = 0;
+  let executeCalls = 0;
+  const POST = createRunHandler({
+    capability,
+    execute: async () => {
+      executeCalls += 1;
+    },
+    loadInput: async () => {
+      loadCalls += 1;
+      return {};
+    },
+  });
+
+  const response = await POST(apiRequest("/api/automation/run", {
+    token: capability,
+    rawBody: "{not-json",
+  }));
+
+  assert.equal(response.status, 400);
+  assert.equal(loadCalls, 0);
+  assert.equal(executeCalls, 0);
+});
+
+test("run route classifies malformed timezone input as validation", async () => {
+  let executeCalls = 0;
+  const POST = createRunHandler({
+    capability,
+    execute: async () => {
+      executeCalls += 1;
+    },
+  });
+
+  const response = await POST(apiRequest("/api/automation/run", {
+    token: capability,
+    body: { timezone: "Not/A_Timezone" },
+  }));
+
+  assert.equal(response.status, 400);
+  assert.equal(executeCalls, 0);
+});
+
 test("run route never returns secrets from service failures", async () => {
   const POST = createRunHandler({
     capability,
@@ -110,11 +155,66 @@ test("run route never returns secrets from service failures", async () => {
 
   const response = await POST(apiRequest("/api/automation/run", {
     token: capability,
+    body: {},
   }));
   const body = await response.json();
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 500);
   assert.doesNotMatch(JSON.stringify(body), /secret-service-token/);
+});
+
+test("run route classifies validation, provider, internal, and conflict outcomes", async () => {
+  const cases = [
+    {
+      execute: async () => {
+        throw new AutomationSetupError("GitHub token is required.");
+      },
+      status: 400,
+      message: /GitHub token is required/,
+    },
+    {
+      execute: async () => {
+        throw new ProviderError(
+          "github",
+          "GitHub unavailable Authorization: Bearer secret-upstream-token",
+        );
+      },
+      status: 502,
+      message: /GitHub unavailable/,
+      absent: /secret-upstream-token/,
+    },
+    {
+      execute: async () => {
+        const error = new Error("database secret-password failed");
+        error.code = "SQLITE_BUSY";
+        throw error;
+      },
+      status: 500,
+      message: /Automation failed/,
+      absent: /secret-password|SQLITE_BUSY/,
+    },
+    {
+      execute: async () => ({ outcome: "already_running", attempt: null }),
+      status: 409,
+      message: /already_running/,
+    },
+  ];
+
+  for (const example of cases) {
+    const POST = createRunHandler({
+      capability,
+      execute: example.execute,
+      loadInput: async () => ({}),
+    });
+    const response = await POST(apiRequest("/api/automation/run", {
+      token: capability,
+      body: {},
+    }));
+    const serialized = JSON.stringify(await response.json());
+    assert.equal(response.status, example.status);
+    assert.match(serialized, example.message);
+    if (example.absent) assert.doesNotMatch(serialized, example.absent);
+  }
 });
 
 test("recover route requires capability and dispatches only valid requests", async () => {
@@ -142,6 +242,57 @@ test("recover route requires capability and dispatches only valid requests", asy
   assert.deepEqual(await response.json(), {
     result: { results: [], input: { ownerId: "owner-1" } },
   });
+});
+
+test("recover route shares sanitized error and conflict classification", async () => {
+  const cases = [
+    {
+      recover: async () => {
+        throw new SyntaxError("Recovery input is invalid.");
+      },
+      status: 400,
+      message: /Recovery input is invalid/,
+    },
+    {
+      recover: async () => {
+        throw new ProviderError(
+          "google_sheets",
+          "Sheets unavailable Bearer secret-recovery-token",
+        );
+      },
+      status: 502,
+      message: /Sheets unavailable/,
+      absent: /secret-recovery-token/,
+    },
+    {
+      recover: async () => {
+        throw new Error("database secret-recovery-password failed");
+      },
+      status: 500,
+      message: /Recovery failed/,
+      absent: /secret-recovery-password/,
+    },
+    {
+      recover: async () => ({ outcome: "already_running", attempt: null }),
+      status: 409,
+      message: /already_running/,
+    },
+  ];
+
+  for (const example of cases) {
+    const POST = createRecoverHandler({
+      capability,
+      recover: example.recover,
+      loadInput: async () => ({}),
+    });
+    const response = await POST(apiRequest("/api/automation/recover", {
+      token: capability,
+    }));
+    const serialized = JSON.stringify(await response.json());
+    assert.equal(response.status, example.status);
+    assert.match(serialized, example.message);
+    if (example.absent) assert.doesNotMatch(serialized, example.absent);
+  }
 });
 
 test("settings route keeps automation configuration and status separate", async () => {

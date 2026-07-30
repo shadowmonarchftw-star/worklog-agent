@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { authorizeAutomationRequest } from "../../../../lib/automationAuth.mjs";
 import {
+  automationErrorResponse,
+  automationResultResponse,
+} from "../../../../lib/automationHttp.mjs";
+import {
   claimAutomationRecovery,
 } from "../../../../lib/automationStore.mjs";
-import { redactProviderSecrets } from "../../../../lib/providerError.mjs";
 import { recoverInterruptedRuns } from "../../../../lib/worklogService.mjs";
 import { loadAutomationInput } from "../run/route.js";
 
@@ -35,16 +38,9 @@ export function createRecoverHandler({
     });
     if (rejection) return rejection;
     try {
-      return Response.json({ result: await recover(await loadInput()) });
+      return automationResultResponse(await recover(await loadInput()));
     } catch (error) {
-      return Response.json(
-        {
-          error: redactProviderSecrets(
-            error.safeMessage || error.message || "Recovery failed.",
-          ),
-        },
-        { status: 400 },
-      );
+      return automationErrorResponse(error, { fallback: "Recovery failed." });
     }
   };
 }

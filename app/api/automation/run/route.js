@@ -12,6 +12,10 @@ import {
   transitionAutomationAttempt,
 } from "../../../../lib/automationStore.mjs";
 import { authorizeAutomationRequest } from "../../../../lib/automationAuth.mjs";
+import {
+  automationErrorResponse,
+  automationResultResponse,
+} from "../../../../lib/automationHttp.mjs";
 import { geminiProvider } from "../../../../lib/geminiProvider.mjs";
 import { githubProvider } from "../../../../lib/githubProvider.mjs";
 import { googleSheetsProvider } from "../../../../lib/googleSheetsProvider.mjs";
@@ -21,9 +25,15 @@ import {
   saveHistoryEntry,
   setSetting,
 } from "../../../../lib/localDb.mjs";
-import { localDateAt, localTimezone } from "../../../../lib/localDate.mjs";
-import { redactProviderSecrets } from "../../../../lib/providerError.mjs";
-import { executeWorklog } from "../../../../lib/worklogService.mjs";
+import {
+  localDateAt,
+  localDayUtcRange,
+  localTimezone,
+} from "../../../../lib/localDate.mjs";
+import {
+  AutomationSetupError,
+  executeWorklog,
+} from "../../../../lib/worklogService.mjs";
 
 function mapInterrupted(row) {
   return {
@@ -93,16 +103,33 @@ function lease(db) {
 }
 
 export async function loadAutomationInput(body = {}) {
-  const db = getAppDb();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new AutomationSetupError("Request body must be an object.");
+  }
   const timezone = body.timezone || localTimezone();
-  const workDate = body.workDate || localDateAt(new Date(), timezone);
   const trigger = body.trigger || "manual";
+  let workDate;
+  try {
+    workDate = body.workDate || localDateAt(new Date(), timezone);
+  } catch (error) {
+    throw new AutomationSetupError(
+      error.message || "Invalid work date or timezone.",
+    );
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate)) {
-    throw new TypeError("workDate must use YYYY-MM-DD");
+    throw new AutomationSetupError("workDate must use YYYY-MM-DD");
   }
   if (!["automatic", "manual"].includes(trigger)) {
-    throw new TypeError("trigger must be automatic or manual");
+    throw new AutomationSetupError("trigger must be automatic or manual");
   }
+  try {
+    localDayUtcRange(workDate, timezone);
+  } catch (error) {
+    throw new AutomationSetupError(
+      error.message || "Invalid work date or timezone.",
+    );
+  }
+  const db = getAppDb();
   const settings = getSetting(db, "app-settings") || {};
   const providers = {
     github: githubProvider,
@@ -143,18 +170,16 @@ export function createRunHandler({
       mutation: true,
     });
     if (rejection) return rejection;
+    let body;
     try {
-      const body = await request.json().catch(() => ({}));
-      return Response.json({ result: await execute(await loadInput(body)) });
+      body = await request.json();
     } catch (error) {
-      return Response.json(
-        {
-          error: redactProviderSecrets(
-            error.safeMessage || error.message || "Automation failed.",
-          ),
-        },
-        { status: 400 },
-      );
+      return automationErrorResponse(error);
+    }
+    try {
+      return automationResultResponse(await execute(await loadInput(body)));
+    } catch (error) {
+      return automationErrorResponse(error);
     }
   };
 }

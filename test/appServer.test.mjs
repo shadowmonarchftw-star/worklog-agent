@@ -7,6 +7,7 @@ const {
   getServerConfig,
   isAppReady,
   startAppServer,
+  waitForAppUrl,
 } = require("../electron/app-server.cjs");
 
 test("uses an externally supplied app URL without starting a server", () => {
@@ -242,4 +243,52 @@ test("readiness adopts only the matching token-protected launch identity", async
     launchNonce: "different-nonce",
     fetchImpl,
   }), false);
+});
+
+test("identity readiness aborts a hanging fetch within its timeout", async () => {
+  let observedSignal;
+  const fetchImpl = async (_url, { signal }) => {
+    observedSignal = signal;
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    });
+  };
+  const startedAt = Date.now();
+
+  assert.equal(await isAppReady("http://127.0.0.1:3000", {
+    capability: "ready-capability",
+    launchNonce: "ready-nonce",
+    fetchImpl,
+    readinessTimeoutMs: 20,
+  }), false);
+  assert.equal(observedSignal.aborted, true);
+  assert.ok(Date.now() - startedAt < 500);
+});
+
+test("readiness attempts progress when every fetch hangs", async () => {
+  let calls = 0;
+  const fetchImpl = async (_url, { signal }) => {
+    calls += 1;
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    });
+  };
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    () => waitForAppUrl("https://dev.example.test", {
+      automationAvailable: false,
+      attempts: 3,
+      fetchImpl,
+      readinessTimeoutMs: 20,
+      retryDelayMs: 1,
+    }),
+    /did not become ready/,
+  );
+  assert.equal(calls, 3);
+  assert.ok(Date.now() - startedAt < 500);
 });

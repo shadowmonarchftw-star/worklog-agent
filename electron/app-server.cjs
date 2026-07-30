@@ -4,6 +4,7 @@ const { createHash, randomBytes, timingSafeEqual } = require("node:crypto");
 const path = require("node:path");
 
 const defaultHostname = "127.0.0.1";
+const defaultReadinessTimeoutMs = 1_000;
 
 function launchSecret() {
   return randomBytes(32).toString("base64url");
@@ -20,6 +21,30 @@ function safeIdentityEqual(left, right) {
   const rightBuffer = Buffer.from(String(right));
   return leftBuffer.length === rightBuffer.length &&
     timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {
+  const controller = new AbortController();
+  const signal = AbortSignal.any([
+    AbortSignal.timeout(timeoutMs),
+    controller.signal,
+  ]);
+  const timer = setTimeout(() => {
+    controller.abort(new Error("Readiness request timed out."));
+  }, timeoutMs);
+  const aborted = new Promise((_resolve, reject) => {
+    signal.addEventListener("abort", () => reject(signal.reason), {
+      once: true,
+    });
+  });
+  try {
+    return await Promise.race([
+      fetchImpl(url, { ...options, signal }),
+      aborted,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function getServerConfig(
@@ -68,13 +93,17 @@ async function isAppReady(
     capability,
     launchNonce,
     fetchImpl = fetch,
+    readinessTimeoutMs = defaultReadinessTimeoutMs,
   } = {},
 ) {
   if (!capability || !launchNonce) return false;
   try {
-    const response = await fetchImpl(`${url}/api/automation/identity`, {
-      headers: { Authorization: `Bearer ${capability}` },
-    });
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      `${url}/api/automation/identity`,
+      { headers: { Authorization: `Bearer ${capability}` } },
+      readinessTimeoutMs,
+    );
     if (!response.ok) return false;
     const body = await response.json();
     return safeIdentityEqual(body.identity, launchIdentity(launchNonce));
@@ -176,24 +205,39 @@ async function startAppServer(config, dependencies = {}) {
   };
 }
 
-async function isUiReady(url) {
+async function isUiReady(
+  url,
+  {
+    fetchImpl = fetch,
+    readinessTimeoutMs = defaultReadinessTimeoutMs,
+  } = {},
+) {
   try {
-    return (await fetch(url)).ok;
+    return (await fetchWithTimeout(
+      fetchImpl,
+      url,
+      {},
+      readinessTimeoutMs,
+    )).ok;
   } catch {
     return false;
   }
 }
 
 async function waitForAppUrl(url, launch = {}) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  const attempts = launch.attempts ?? 60;
+  const retryDelayMs = launch.retryDelayMs ?? 500;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     const ready = launch.automationAvailable === false
-      ? await isUiReady(url)
+      ? await isUiReady(url, launch)
       : await isAppReady(url, launch);
     if (ready) {
       return;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (attempt + 1 < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
   }
 
   throw new Error(`App did not become ready at ${url}`);

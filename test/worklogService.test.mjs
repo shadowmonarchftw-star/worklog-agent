@@ -94,9 +94,12 @@ function harness(overrides = {}) {
   };
 }
 
-test("incomplete setup fails before claiming", async () => {
+test("incomplete setup is a typed validation failure before claiming", async () => {
   const h = harness({ settings: { ...settings, geminiApiKey: "" } });
-  await assert.rejects(() => executeWorklog(h.args), /Gemini API key/);
+  await assert.rejects(
+    () => executeWorklog(h.args),
+    (error) => error instanceof TypeError && /Gemini API key/.test(error.message),
+  );
   assert.deepEqual(h.calls, []);
 });
 
