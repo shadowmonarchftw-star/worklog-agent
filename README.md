@@ -13,7 +13,7 @@ local settings.
 
 Open the repository's **Actions** tab, select the latest successful **Build
 Windows Installer** run, and download the `AI-Worklog-Agent-Windows` artifact.
-Extract the ZIP and run `AI Worklog Agent-Setup-0.1.1.exe`.
+Extract the ZIP and run `AI Worklog Agent-Setup-0.1.2.exe`.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from

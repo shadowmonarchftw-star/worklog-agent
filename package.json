@@ -1,6 +1,6 @@
 {
   "name": "ai-worklog-agent",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local desktop agent for GitHub-based daily worklogs",
   "author": "AI Worklog Agent",
   "private": true,
@@ -11,7 +11,7 @@
     "build": "next build",
     "dist": "npm run build && electron-builder",
     "dist:dir": "npm run build && electron-builder --dir",
-    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "start": "next start",
     "test": "node --test test/*.test.mjs"
   },
