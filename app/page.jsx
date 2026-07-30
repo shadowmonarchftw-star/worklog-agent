@@ -5,6 +5,7 @@ import { AppShell } from "./components/AppShell";
 import { DashboardView } from "./components/DashboardView";
 import { SettingsView } from "./components/SettingsView";
 import { createHistoryEntry } from "../lib/worklogHistory.mjs";
+import { localDateAt } from "../lib/localDate.mjs";
 import {
   activityInputKey,
   canWriteToGoogle,
@@ -27,7 +28,7 @@ export default function Home() {
   const [sheetStatus, setSheetStatus] = useState("");
   const [repos, setRepos] = useState([]);
   const [selectedRepos, setSelectedRepos] = useState([]);
-  const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
+  const [workDate, setWorkDate] = useState(() => localDateAt());
   const [style, setStyle] = useState("standup");
   const [theme, setTheme] = useState("dark");
   const [activity, setActivity] = useState("");

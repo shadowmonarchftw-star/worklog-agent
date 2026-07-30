@@ -1,6 +1,7 @@
 import {
   buildActivityResult,
   dayRangeUtc,
+  filterCommitsByRange,
   formatPullRequestActivity,
   normalizeToken,
 } from "../../../../lib/githubActivity.mjs";
@@ -15,7 +16,15 @@ function githubHeaders(token) {
 
 export async function POST(request) {
   try {
-    const { githubToken, repoFullName, repoFullNames, date, author } = await request.json();
+    const {
+      githubToken,
+      repoFullName,
+      repoFullNames,
+      date,
+      author,
+      since: suppliedSince,
+      until: suppliedUntil,
+    } = await request.json();
     const token = normalizeToken(githubToken);
     const repos = repoFullNames?.length ? repoFullNames : [repoFullName].filter(Boolean);
 
@@ -27,7 +36,11 @@ export async function POST(request) {
       return Response.json({ error: "Choose a date." }, { status: 400 });
     }
 
-    const { since, until } = dayRangeUtc(date);
+    const hasExplicitRange = Boolean(suppliedSince && suppliedUntil);
+    const range = hasExplicitRange
+      ? { since: suppliedSince, until: suppliedUntil }
+      : dayRangeUtc(date);
+    const { since, until } = range;
     const params = new URLSearchParams({
       since,
       until,
@@ -54,12 +67,19 @@ export async function POST(request) {
 
         return {
           repo,
-          commits: await response.json(),
+          commits: hasExplicitRange
+            ? filterCommitsByRange(await response.json(), range)
+            : await response.json(),
         };
       }),
     );
 
-    const prGroups = await fetchPullRequests({ token, date, author });
+    const prGroups = await fetchPullRequests({
+      token,
+      date,
+      author,
+      range: hasExplicitRange ? range : undefined,
+    });
 
     return Response.json(
       buildActivityResult({
@@ -74,7 +94,7 @@ export async function POST(request) {
   }
 }
 
-async function fetchPullRequests({ token, date, author }) {
+async function fetchPullRequests({ token, date, author, range }) {
   if (!author?.trim()) {
     return {};
   }
@@ -82,7 +102,9 @@ async function fetchPullRequests({ token, date, author }) {
   const query = [
     "is:pr",
     `author:${author.trim()}`,
-    `updated:${date}`,
+    range
+      ? `updated:${range.since.slice(0, 10)}..${range.until.slice(0, 10)}`
+      : `updated:${date}`,
   ].join(" ");
 
   const response = await fetch(
@@ -97,5 +119,5 @@ async function fetchPullRequests({ token, date, author }) {
   }
 
   const data = await response.json();
-  return formatPullRequestActivity(data.items || []);
+  return formatPullRequestActivity(data.items || [], range);
 }
