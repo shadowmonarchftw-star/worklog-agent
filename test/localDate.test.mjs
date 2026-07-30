@@ -57,3 +57,50 @@ test("nextScheduledAt skips today's run after its scheduled time", () => {
     "2026-03-15T13:00:00.000Z",
   );
 });
+
+test("nextScheduledAt uses the first valid instant after a spring-forward gap", () => {
+  assert.equal(
+    nextScheduledAt({
+      now: new Date("2026-03-08T05:00:00.000Z"),
+      time: "02:30",
+      days: [7],
+      timezone: "America/New_York",
+    }),
+    "2026-03-08T07:00:00.000Z",
+  );
+});
+
+test("nextScheduledAt uses the first occurrence in a fall-back overlap", () => {
+  assert.equal(
+    nextScheduledAt({
+      now: new Date("2026-11-01T04:00:00.000Z"),
+      time: "01:30",
+      days: [7],
+      timezone: "America/New_York",
+    }),
+    "2026-11-01T05:30:00.000Z",
+  );
+});
+
+test("nextScheduledAt uses the second overlap occurrence after the first passes", () => {
+  assert.equal(
+    nextScheduledAt({
+      now: new Date("2026-11-01T06:00:00.000Z"),
+      time: "01:30",
+      days: [7],
+      timezone: "America/New_York",
+    }),
+    "2026-11-01T06:30:00.000Z",
+  );
+});
+
+test("calendar functions reject impossible YYYY-MM-DD values", () => {
+  assert.throws(
+    () => localDayUtcRange("2026-02-31", "America/New_York"),
+    /invalid local date/i,
+  );
+  assert.throws(
+    () => isoWeekday("2026-13-01", "Asia/Kathmandu"),
+    /invalid local date/i,
+  );
+});
