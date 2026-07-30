@@ -63,7 +63,7 @@ test("history entries persist newest first and replace same work date", () => {
   assert.deepEqual(history[0].repos, ["owner/app"]);
 });
 
-test("automation schema includes days, attempts, lease, foreign keys, and indexes", () => {
+test("automation schema includes durable days, linked attempts, lease, and indexes", () => {
   const db = tempDb();
 
   const tables = db
@@ -82,12 +82,27 @@ test("automation schema includes days, attempts, lease, foreign keys, and indexe
 
   assert.equal(db.pragma("foreign_keys", { simple: true }), 1);
   assert.deepEqual(
-    db
-      .prepare("SELECT singleton FROM automation_lease")
-      .all()
-      .map(({ singleton }) => singleton),
+    db.prepare("SELECT singleton FROM automation_lease").all().map(
+      ({ singleton }) => singleton,
+    ),
     [1],
   );
+
+  const dayColumns = db.pragma("table_info('automation_days')").map(
+    ({ name }) => name,
+  );
+  assert.deepEqual(dayColumns, [
+    "id",
+    "work_date",
+    "timezone",
+    "since",
+    "until",
+    "terminal_outcome",
+    "success_attempt_id",
+    "created_at",
+    "updated_at",
+    "completed_at",
+  ]);
 
   const indexes = db
     .prepare(
@@ -102,6 +117,12 @@ test("automation schema includes days, attempts, lease, foreign keys, and indexe
   assert.ok(indexes.includes("automation_attempts_created_at_idx"));
 
   const foreignKeys = db.pragma("foreign_key_list('automation_attempts')");
+  assert.ok(
+    foreignKeys.some(
+      ({ table, from, to }) =>
+        table === "automation_days" && from === "day_id" && to === "id",
+    ),
+  );
   assert.ok(
     foreignKeys.some(
       ({ table, from, to }) =>
