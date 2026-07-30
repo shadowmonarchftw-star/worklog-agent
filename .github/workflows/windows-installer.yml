@@ -25,7 +25,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # npm lockfiles generated on macOS omit electron-builder's Windows-only
+        # optional packages, so resolve them on the Windows runner.
+        run: npm install
 
       - name: Run tests
         run: npm test
