@@ -1,0 +1,367 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap");
+
+:root {
+  color-scheme: light;
+  --ink: #171717;
+  --muted: #6b7280;
+  --line: #d4d4d4;
+  --panel: #ffffff;
+  --page: #f7f7f5;
+  --accent: #111827;
+  --accent-strong: #000000;
+  --danger: #b42318;
+}
+
+.shell[data-theme="dark"] {
+  --ink: #f4f4ef;
+  --muted: #b8b8b0;
+  --line: #42423c;
+  --panel: #171716;
+  --page: #0b0b0a;
+  --field: #10100f;
+  --button-fg: #0b0b0a;
+  --accent: #f4f4ef;
+  --accent-strong: #d6d6ce;
+  --danger: #f87171;
+}
+
+.shell[data-theme="light"] {
+  --ink: #171717;
+  --muted: #6b7280;
+  --line: #d4d4d4;
+  --panel: #ffffff;
+  --page: #f7f7f5;
+  --field: #fbfbfa;
+  --button-fg: #ffffff;
+  --accent: #111827;
+  --accent-strong: #000000;
+  --danger: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0e0e0d;
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.shell {
+  min-height: 100vh;
+  width: min(1500px, calc(100% - 24px));
+  margin: 0 auto;
+  padding: 16px 0;
+  background: var(--page);
+}
+
+.intro {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.8fr) minmax(420px, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+  min-height: 78px;
+  padding-bottom: 12px;
+}
+
+.theme-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  width: 82px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.theme-switch button {
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--muted);
+  height: 36px;
+  padding: 0;
+  text-align: center;
+}
+
+.theme-switch button.active {
+  background: var(--accent);
+  color: var(--button-fg);
+}
+
+.theme-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.theme-icon.moon {
+  border-radius: 999px;
+  box-shadow: inset -5px 0 0 currentColor;
+}
+
+.theme-icon.sun {
+  position: relative;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.theme-icon.sun::before,
+.theme-icon.sun::after {
+  content: "";
+  position: absolute;
+  inset: -6px 5px;
+  border-block: 2px solid currentColor;
+}
+
+.theme-icon.sun::after {
+  transform: rotate(90deg);
+}
+
+.eyebrow {
+  display: block;
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+h2 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.intro p:not(.eyebrow),
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(480px, 0.92fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.form,
+.result {
+  padding: 16px;
+}
+
+.section {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 190px;
+  gap: 10px;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 13px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  outline: none;
+  padding: 9px 10px;
+  font-size: 12px;
+}
+
+textarea {
+  min-height: 300px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.12);
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--button-fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.repo-list {
+  max-height: 132px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--field);
+  padding: 8px;
+}
+
+.repo-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 5px 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.repo-option input {
+  width: 16px;
+  height: 16px;
+}
+
+button:hover {
+  background: var(--accent-strong);
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.result {
+  min-height: 520px;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.history {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 18px;
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: 1fr 76px;
+  gap: 8px;
+}
+
+.history-item button {
+  text-align: left;
+}
+
+.history-item span,
+.history-item small {
+  display: block;
+}
+
+.history-item small {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.82;
+}
+
+.ghost-button {
+  background: color-mix(in srgb, var(--panel) 82%, var(--ink));
+  color: var(--ink);
+  text-align: center;
+}
+
+.ghost-button:hover {
+  background: color-mix(in srgb, var(--panel) 72%, var(--ink));
+}
+
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.error {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--panel));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+  color: var(--danger);
+  font-size: 12px;
+  padding: 10px;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    padding: 28px 0;
+  }
+
+  h1 {
+    font-size: 26px;
+  }
+
+  .intro,
+  .workspace,
+  .row,
+  .actions {
+    grid-template-columns: 1fr;
+  }
+}
