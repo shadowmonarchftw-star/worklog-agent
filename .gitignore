@@ -6,3 +6,5 @@ release/
 npm-debug.log*
 .DS_Store
 .ai/
+.playwright-cli/
+output/

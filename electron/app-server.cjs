@@ -3,7 +3,6 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 
 const defaultHostname = "127.0.0.1";
-const defaultPort = 3000;
 
 function getServerConfig({ externalUrl, isPackaged, appPath, resourcesPath }) {
   if (externalUrl) {
@@ -13,12 +12,13 @@ function getServerConfig({ externalUrl, isPackaged, appPath, resourcesPath }) {
     };
   }
 
+  const port = Number(process.env.WORKLOG_AGENT_PORT || 3000);
   const baseConfig = {
     appPath,
     hostname: defaultHostname,
     mode: "development",
-    port: defaultPort,
-    url: `http://${defaultHostname}:${defaultPort}`,
+    port,
+    url: `http://${defaultHostname}:${port}`,
   };
 
   if (!isPackaged) {

@@ -3,9 +3,8 @@ import test from "node:test";
 
 import { buildSummaryPrompt, cleanSummaryText } from "../lib/summaryPrompt.mjs";
 
-test("buildSummaryPrompt includes user context and asks for grounded work-log output", () => {
+test("buildSummaryPrompt includes work context and asks for grounded work-log output", () => {
   const prompt = buildSummaryPrompt({
-    developerName: "Asha",
     workDate: "2026-07-23",
     style: "standup",
     activity: "- fix invoice retry bug\n- merge PR #42 dashboard export",
@@ -13,7 +12,7 @@ test("buildSummaryPrompt includes user context and asks for grounded work-log ou
 
   assert.match(prompt.system, /daily work-log assistant/i);
   assert.match(prompt.system, /Do not invent/i);
-  assert.match(prompt.user, /Asha/);
+  assert.doesNotMatch(prompt.user, /Developer:/);
   assert.match(prompt.user, /2026-07-23/);
   assert.match(prompt.user, /standup/);
   assert.match(prompt.user, /fix invoice retry bug/);
@@ -36,7 +35,6 @@ test("buildSummaryPrompt trims empty optional fields and rejects missing activit
 
 test("buildSummaryPrompt keeps API credentials out of prompt text", () => {
   const prompt = buildSummaryPrompt({
-    developerName: "Asha",
     workDate: "2026-07-23",
     style: "concise",
     activity: "commit abc123 add login form",
@@ -49,7 +47,6 @@ test("buildSummaryPrompt keeps API credentials out of prompt text", () => {
 
 test("buildSummaryPrompt asks for Google Sheets-ready plain text", () => {
   const prompt = buildSummaryPrompt({
-    developerName: "Asha",
     workDate: "2026-07-23",
     style: "concise",
     activity: "commit abc123 add login form",
@@ -76,7 +73,6 @@ test("cleanSummaryText can preserve bullet markers for bullet style", () => {
 
 test("buildSummaryPrompt supports bullet point summary style", () => {
   const prompt = buildSummaryPrompt({
-    developerName: "Asha",
     workDate: "2026-07-23",
     style: "bullet-points",
     activity: "commit abc123 add login form",
@@ -88,7 +84,6 @@ test("buildSummaryPrompt supports bullet point summary style", () => {
 
 test("buildSummaryPrompt supports time-wise summary style", () => {
   const prompt = buildSummaryPrompt({
-    developerName: "Asha",
     workDate: "2026-07-23",
     style: "time-wise",
     activity: "commit abc123 add login form",
@@ -96,4 +91,15 @@ test("buildSummaryPrompt supports time-wise summary style", () => {
 
   assert.match(prompt.user, /Morning, Afternoon, and Evening/i);
   assert.match(prompt.user, /actual commit timestamps/i);
+});
+
+test("buildSummaryPrompt ignores legacy developer names", () => {
+  const prompt = buildSummaryPrompt({
+    developerName: "Asha",
+    workDate: "2026-07-23",
+    style: "concise",
+    activity: "commit abc123 add login form",
+  });
+
+  assert.doesNotMatch(prompt.user, /Asha|Developer:/);
 });

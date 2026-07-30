@@ -1,6 +1,6 @@
 {
   "name": "ai-worklog-agent",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Local desktop agent for GitHub-based daily worklogs",
   "author": "AI Worklog Agent",
   "private": true,
@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^13.0.1",
+    "lucide-react": "^1.28.0",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"
@@ -43,6 +44,15 @@
       {
         "from": ".next/standalone",
         "to": "server",
+        "filter": [
+          "server.js",
+          "package.json",
+          ".next/**/*"
+        ]
+      },
+      {
+        "from": ".next/standalone/node_modules",
+        "to": "server/node_modules",
         "filter": [
           "**/*"
         ]

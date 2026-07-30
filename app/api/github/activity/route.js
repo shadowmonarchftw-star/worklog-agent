@@ -1,7 +1,7 @@
 import {
+  buildActivityResult,
   dayRangeUtc,
   formatPullRequestActivity,
-  formatRepositoryActivity,
   normalizeToken,
 } from "../../../../lib/githubActivity.mjs";
 
@@ -61,20 +61,14 @@ export async function POST(request) {
 
     const prGroups = await fetchPullRequests({ token, date, author });
 
-    const activity = commitResults
-      .map(({ repo, commits }) =>
-        formatRepositoryActivity({
-          repoFullName: repo,
-          commits,
-          pullRequests: prGroups[repo] || [],
-        }),
-      )
-      .join("\n\n");
-
-    return Response.json({
-      activity,
-      count: commitResults.reduce((total, item) => total + item.commits.length, 0),
-    });
+    return Response.json(
+      buildActivityResult({
+        date,
+        repos,
+        commitResults,
+        prGroups,
+      }),
+    );
   } catch (error) {
     return Response.json({ error: error.message }, { status: 400 });
   }

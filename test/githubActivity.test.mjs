@@ -2,11 +2,40 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildActivityResult,
   extractCommitAuthors,
   formatPullRequestActivity,
   formatRepositoryActivity,
   normalizeToken,
 } from "../lib/githubActivity.mjs";
+
+test("buildActivityResult returns selected-repository metrics", () => {
+  const result = buildActivityResult({
+    date: "2026-07-30",
+    repos: ["owner/app", "owner/api"],
+    commitResults: [
+      {
+        repo: "owner/app",
+        commits: [
+          { sha: "abcdef123", commit: { message: "Fix app", author: { date: "2026-07-30T08:00:00Z" } } },
+        ],
+      },
+      { repo: "owner/api", commits: [] },
+    ],
+    prGroups: {
+      "owner/app": [{ number: 1, title: "App PR", stateLabel: "merged PR" }],
+      "other/repo": [{ number: 2, title: "Unselected", stateLabel: "PR activity" }],
+    },
+  });
+
+  assert.equal(result.date, "2026-07-30");
+  assert.equal(result.commitCount, 1);
+  assert.equal(result.pullRequestCount, 1);
+  assert.equal(result.repoCount, 2);
+  assert.match(result.activity, /owner\/app/);
+  assert.doesNotMatch(result.activity, /Unselected/);
+  assert.match(result.activity, /No commits or PR activity/);
+});
 
 test("formatCommitActivity groups commits under the repo name", () => {
   const activity = formatRepositoryActivity({

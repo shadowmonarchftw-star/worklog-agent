@@ -18,7 +18,7 @@ local settings.
    failed builds and can be ignored.
 5. Scroll to **Artifacts** and download `AI-Worklog-Agent-Windows`.
 6. Extract the downloaded ZIP.
-7. Run `AI Worklog Agent-Setup-0.1.6.exe`.
+7. Run `AI Worklog Agent-Setup-0.1.7.exe`.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
@@ -135,11 +135,10 @@ Open Settings in the app and provide:
    read access to the repositories and repository metadata you want to use.
 2. **Gemini API key** - create one in
    [Google AI Studio](https://aistudio.google.com/app/apikey).
-3. **Developer name** - the name used in generated worklogs.
-4. **GitHub commit author** - select your own GitHub username so the app only
+3. **GitHub commit author** - select your own GitHub username so the app only
    reads your commits from shared repositories.
-5. **Repositories** - load and select the repositories used for your worklog.
-6. **Summary style** - choose the output format you prefer.
+4. **Repositories** - load and select the repositories used for your worklog.
+5. **Summary style** - choose the output format you prefer.
 
 Settings and credentials are stored only in the app's local SQLite database on
 that computer. Do not share tokens or commit them to Git.
@@ -293,7 +292,7 @@ Repository maintainers can create a new installer without a Windows computer:
 6. Open the completed run and download `AI-Worklog-Agent-Windows` under
    **Artifacts**.
 
-Pushing a version tag such as `v0.1.6` also starts the installer workflow.
+Pushing a version tag such as `v0.1.7` also starts the installer workflow.
 
 ## Creating macOS Installers on GitHub
 

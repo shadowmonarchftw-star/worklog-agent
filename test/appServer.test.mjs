@@ -52,3 +52,18 @@ test("uses the compiled Next server for an installed app", () => {
     },
   );
 });
+
+test("uses an isolated port when configured for packaged smoke tests", async () => {
+  const originalPort = process.env.WORKLOG_AGENT_PORT;
+  process.env.WORKLOG_AGENT_PORT = "31888";
+
+  const config = getServerConfig({
+    isPackaged: false,
+    appPath: "/app",
+  });
+
+  assert.equal(config.port, 31888);
+  assert.equal(config.url, "http://127.0.0.1:31888");
+  if (originalPort === undefined) delete process.env.WORKLOG_AGENT_PORT;
+  else process.env.WORKLOG_AGENT_PORT = originalPort;
+});

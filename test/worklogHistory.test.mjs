@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { createHistoryEntry, upsertHistoryEntry } from "../lib/worklogHistory.mjs";
 
-test("createHistoryEntry captures summary metadata without secrets", () => {
+test("createHistoryEntry uses an empty legacy developer value", () => {
   const entry = createHistoryEntry({
     developerName: "Asha",
     workDate: "2026-07-23",
@@ -15,7 +15,7 @@ test("createHistoryEntry captures summary metadata without secrets", () => {
     githubToken: "secret",
   });
 
-  assert.equal(entry.developerName, "Asha");
+  assert.equal(entry.developerName, "");
   assert.equal(entry.workDate, "2026-07-23");
   assert.deepEqual(entry.repos, ["owner/app"]);
   assert.equal(entry.summary, "Fixed export flow.");
