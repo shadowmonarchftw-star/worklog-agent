@@ -631,6 +631,30 @@ test("store discards retry due time for manual failures", () => {
   db.close();
 });
 
+test("manual failure does not consume the automatic attempt allowance", () => {
+  const { first: db } = tempDbHandles();
+  const manual = claim(db, {
+    trigger: "manual",
+    ownerId: "manual-owner",
+  });
+  transitionAutomationAttempt(db, {
+    attemptId: manual.attempt.id,
+    ownerId: "manual-owner",
+    to: "failed",
+    now: "2026-07-30T10:01:00.000Z",
+  });
+
+  const automatic = claim(db, {
+    trigger: "automatic",
+    ownerId: "automatic-owner",
+    now: "2026-07-30T10:02:00.000Z",
+  });
+
+  assert.equal(automatic.outcome, "claimed");
+  assert.equal(automatic.attempt.retryOfId, null);
+  db.close();
+});
+
 test("running checkpoints persist immutable intent and prewrite evidence", () => {
   const { first } = tempDbHandles();
   const started = claim(first);

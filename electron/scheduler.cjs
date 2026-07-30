@@ -178,7 +178,10 @@ function createScheduler({
     }
 
     const latest = status.lastAttempt;
-    if (latest?.workDate === local.date) {
+    if (
+      latest?.workDate === local.date &&
+      latest.trigger === "automatic"
+    ) {
       if (["success", "no_activity", "running"].includes(latest.status)) {
         return { status };
       }

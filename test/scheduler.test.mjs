@@ -111,6 +111,7 @@ test("uses persisted retry due time and never retries terminal outcomes", async 
       nextRun: null,
       lastAttempt: {
         workDate: "2026-07-30",
+        trigger: "automatic",
         status: "failed",
         retryDueAt: "2026-07-30T12:00:00.000Z",
       },
@@ -126,12 +127,55 @@ test("uses persisted retry due time and never retries terminal outcomes", async 
     const terminal = harness({
       status: {
         nextRun: null,
-        lastAttempt: { workDate: "2026-07-30", status },
+        lastAttempt: {
+          workDate: "2026-07-30",
+          trigger: "automatic",
+          status,
+        },
       },
     });
     await terminal.scheduler.tick(new Date("2026-07-30T18:00:00+05:45"));
     assert.equal(terminal.calls.run.length, 0);
   }
+});
+
+test("manual failure before schedule does not suppress the due automatic run", async () => {
+  const { calls, scheduler } = harness({
+    status: {
+      nextRun: "2026-07-30T11:45:00.000Z",
+      lastAttempt: {
+        workDate: "2026-07-30",
+        trigger: "manual",
+        status: "failed",
+        retryDueAt: null,
+      },
+    },
+  });
+
+  await scheduler.tick(new Date("2026-07-30T17:29:59+05:45"));
+  assert.equal(calls.run.length, 0);
+  await scheduler.tick(new Date("2026-07-30T17:30:00+05:45"));
+
+  assert.equal(calls.run.length, 1);
+  assert.equal(calls.run[0].trigger, "automatic");
+});
+
+test("automatic failure without retry due remains suppressed", async () => {
+  const { calls, scheduler } = harness({
+    status: {
+      nextRun: null,
+      lastAttempt: {
+        workDate: "2026-07-30",
+        trigger: "automatic",
+        status: "failed",
+        retryDueAt: null,
+      },
+    },
+  });
+
+  await scheduler.tick(new Date("2026-07-30T17:30:00+05:45"));
+
+  assert.equal(calls.run.length, 0);
 });
 
 test("starts one-minute wakes only after recovery and stops them", async () => {
