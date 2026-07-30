@@ -3,30 +3,27 @@
 import { useEffect, useState } from "react";
 import { createHistoryEntry } from "../lib/worklogHistory.mjs";
 
-const sampleActivity = `repo: billing-api
-- commit 9f12c3a fix invoice retry logic for failed card payments
-- commit a41b9d0 add tests for payment failure validation
-
-repo: dashboard
-- PR #42 merged: improve customer activity export button
-- commit e83aa91 clean up table empty state`;
-
 export default function Home() {
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [githubToken, setGithubToken] = useState("");
   const [githubAuthor, setGithubAuthor] = useState("");
+  const [githubAuthors, setGithubAuthors] = useState([]);
   const [repos, setRepos] = useState([]);
   const [selectedRepos, setSelectedRepos] = useState([]);
   const [developerName, setDeveloperName] = useState("");
   const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
   const [style, setStyle] = useState("standup");
   const [theme, setTheme] = useState("dark");
-  const [activity, setActivity] = useState(sampleActivity);
+  const [activity, setActivity] = useState("");
   const [summary, setSummary] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
   const [history, setHistory] = useState([]);
+  const [view, setView] = useState("worklog");
+  const [showActivity, setShowActivity] = useState(false);
+
+  const setupComplete = Boolean(githubToken && geminiApiKey && selectedRepos.length);
 
   useEffect(() => {
     async function loadLocalData() {
@@ -44,6 +41,11 @@ export default function Home() {
         setStyle(settings.style || "standup");
         setTheme(settings.theme || "dark");
         setSelectedRepos(settings.selectedRepos || []);
+        if (settings.githubToken && settings.selectedRepos?.length) {
+          loadAuthors(settings.selectedRepos, settings.githubToken);
+        } else if (settings.githubToken) {
+          loadAuthors([], settings.githubToken);
+        }
       }
 
       if (historyResponse.ok) {
@@ -96,6 +98,27 @@ export default function Home() {
     const nextSelectedRepos = data.repos[0]?.fullName ? [data.repos[0].fullName] : [];
     setSelectedRepos(nextSelectedRepos);
     saveSettings({ selectedRepos: nextSelectedRepos });
+    if (nextSelectedRepos.length) {
+      loadAuthors(nextSelectedRepos);
+    }
+  }
+
+  async function loadAuthors(repoNames = selectedRepos, token = githubToken) {
+    if (!token) {
+      setGithubAuthors([]);
+      return;
+    }
+
+    const response = await fetch("/api/github/authors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ githubToken: token, repoFullNames: repoNames }),
+    });
+
+    const data = await response.json();
+    if (response.ok) {
+      setGithubAuthors(data.authors || []);
+    }
   }
 
   function toggleRepo(repoFullName) {
@@ -104,6 +127,7 @@ export default function Home() {
         ? current.filter((repo) => repo !== repoFullName)
         : [...current, repoFullName];
       saveSettings({ selectedRepos: nextSelectedRepos });
+      loadAuthors(nextSelectedRepos);
       return nextSelectedRepos;
     });
   }
@@ -132,10 +156,10 @@ export default function Home() {
     }
 
     setActivity(data.activity);
+    return data.activity;
   }
 
-  async function generateSummary(event) {
-    event.preventDefault();
+  async function generateSummaryFromActivity(nextActivity) {
     setLoading(true);
     setError("");
     setSummary("");
@@ -148,7 +172,7 @@ export default function Home() {
         developerName,
         workDate,
         style,
-        activity,
+        activity: nextActivity,
       }),
     });
 
@@ -166,7 +190,7 @@ export default function Home() {
       workDate,
       style,
       selectedRepos,
-      activity,
+      activity: nextActivity,
       summary: data.summary,
     });
     const historyResponse = await fetch("/api/local/history", {
@@ -179,6 +203,18 @@ export default function Home() {
       setHistory(history);
     }
     saveSettings();
+  }
+
+  async function generateSummary(event) {
+    event.preventDefault();
+    await generateSummaryFromActivity(activity);
+  }
+
+  async function generateTodayWorklog() {
+    const nextActivity = await fetchGithubActivity();
+    if (nextActivity) {
+      await generateSummaryFromActivity(nextActivity);
+    }
   }
 
   function restoreHistoryEntry(entry) {
@@ -215,200 +251,265 @@ export default function Home() {
           Fetch GitHub activity, generate a daily work summary, and keep history
           in local SQLite.
         </p>
-        <div className="theme-switch" aria-label="Theme">
+        <nav className="top-nav" aria-label="App views">
           <button
-            className={theme === "dark" ? "active" : ""}
-            aria-label="Use dark theme"
-            title="Dark"
+            className={view === "worklog" ? "active" : ""}
+            aria-label="Worklog"
+            title="Worklog"
             type="button"
-            onClick={() => {
-              setTheme("dark");
-              saveSettings({ theme: "dark" });
-            }}
+            onClick={() => setView("worklog")}
           >
-            <span className="theme-icon moon" aria-hidden="true" />
+            <span className="nav-icon worklog-icon" aria-hidden="true" />
           </button>
           <button
-            className={theme === "light" ? "active" : ""}
-            aria-label="Use light theme"
-            title="Light"
+            className={view === "settings" ? "active" : ""}
+            aria-label="Settings"
+            title="Settings"
             type="button"
-            onClick={() => {
-              setTheme("light");
-              saveSettings({ theme: "light" });
-            }}
+            onClick={() => setView("settings")}
           >
-            <span className="theme-icon sun" aria-hidden="true" />
+            <span className="nav-icon settings-icon" aria-hidden="true" />
           </button>
-        </div>
+        </nav>
       </section>
 
-      <section className="workspace">
-        <form className="panel form" onSubmit={generateSummary}>
-          <div className="section">
-            <p className="eyebrow">GitHub</p>
-            <label>
-              GitHub fine-grained token
-              <input
-                type="password"
-                value={githubToken}
-                onChange={(event) => setGithubToken(event.target.value)}
-                onBlur={() => saveSettings({ githubToken })}
-                placeholder="Paste token here"
-                autoComplete="off"
-              />
-              <span className="hint">
-                Local prototype only. Token is sent to this local app server to
-                read repos and commits.
-              </span>
-            </label>
+      {view === "settings" && (
+        <section className="settings-layout">
+          <form className="panel form" onSubmit={(event) => event.preventDefault()}>
+            <div className="section">
+              <p className="eyebrow">Credentials</p>
+              <label>
+                GitHub fine-grained token
+                <input
+                  type="password"
+                  value={githubToken}
+                  onChange={(event) => setGithubToken(event.target.value)}
+                  onBlur={() => saveSettings({ githubToken })}
+                  placeholder="Paste token here"
+                  autoComplete="off"
+                />
+                <span className="hint">
+                  Stored locally in SQLite. Used to read repos, commits, and PRs.
+                </span>
+              </label>
 
-            <label>
-              Commit author
-              <input
-                value={githubAuthor}
-                onChange={(event) => setGithubAuthor(event.target.value)}
-                onBlur={() => saveSettings({ githubAuthor })}
-                placeholder="GitHub username, optional"
-              />
-            </label>
+              <label>
+                Gemini API key
+                <input
+                  type="password"
+                  value={geminiApiKey}
+                  onChange={(event) => setGeminiApiKey(event.target.value)}
+                  onBlur={() => saveSettings({ geminiApiKey })}
+                  placeholder="Paste key from Google AI Studio"
+                  autoComplete="off"
+                />
+                <span className="hint">
+                  Stored locally in SQLite. Used to generate summaries.
+                </span>
+              </label>
+            </div>
 
-            <label>
-              Repositories
-              <div className="repo-list">
-                {!repos.length && <span className="hint">Load repos first</span>}
-                {repos.map((repo) => (
-                  <label className="repo-option" key={repo.id}>
-                    <input
-                      type="checkbox"
-                      checked={selectedRepos.includes(repo.fullName)}
-                      onChange={() => toggleRepo(repo.fullName)}
-                    />
-                    <span>{repo.fullName}</span>
-                  </label>
-                ))}
+            <div className="section">
+              <p className="eyebrow">Profile</p>
+              <div className="row">
+                <label>
+                  Developer
+                  <input
+                    value={developerName}
+                    onChange={(event) => setDeveloperName(event.target.value)}
+                    onBlur={() => saveSettings({ developerName })}
+                    placeholder="Your name"
+                  />
+                </label>
+                <label>
+                  GitHub commit author
+                  <select
+                    value={githubAuthor}
+                    onChange={(event) => setGithubAuthor(event.target.value)}
+                    onBlur={() => saveSettings({ githubAuthor })}
+                  >
+                    <option value="">Select author</option>
+                    {githubAuthors.map((author) => (
+                      <option key={author.value} value={author.value}>
+                        {author.label}
+                      </option>
+                    ))}
+                    {githubAuthor && !githubAuthors.some((author) => author.value === githubAuthor) && (
+                      <option value={githubAuthor}>{githubAuthor}</option>
+                    )}
+                  </select>
+                </label>
               </div>
-            </label>
+              <p className="hint field-note">
+                Commit author filters shared repos to only your commits and PRs.
+                Load repos first if list is empty.
+              </p>
 
-            <div className="actions">
+              <label>
+                Summary style
+                <select
+                  value={style}
+                  onChange={(event) => {
+                    setStyle(event.target.value);
+                    saveSettings({ style: event.target.value });
+                  }}
+                >
+                  <option value="standup">Standup</option>
+                  <option value="concise">Concise</option>
+                  <option value="detailed">Detailed</option>
+                  <option value="timesheet">Timesheet</option>
+                  <option value="bullet-points">Bullet points</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="section">
+              <p className="eyebrow">Repositories</p>
               <button disabled={githubLoading || !githubToken} type="button" onClick={loadRepos}>
                 {githubLoading ? "Working..." : "Load Repos"}
               </button>
-              <button
-                disabled={githubLoading || !githubToken || !selectedRepos.length}
-                type="button"
-                onClick={fetchGithubActivity}
-              >
-                Fetch Activity ({selectedRepos.length})
-              </button>
+              <label>
+                Monitored repos
+                <div className="repo-list">
+                  {!repos.length && <span className="hint">Load repos after adding GitHub token</span>}
+                  {repos.map((repo) => (
+                    <label className="repo-option" key={repo.id}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRepos.includes(repo.fullName)}
+                        onChange={() => toggleRepo(repo.fullName)}
+                      />
+                      <span>{repo.fullName}</span>
+                    </label>
+                  ))}
+                </div>
+              </label>
             </div>
-          </div>
 
-          <label>
-            Gemini API key
-            <input
-              type="password"
-              value={geminiApiKey}
-              onChange={(event) => setGeminiApiKey(event.target.value)}
-              onBlur={() => saveSettings({ geminiApiKey })}
-              placeholder="Paste key from Google AI Studio"
-              autoComplete="off"
-            />
-            <span className="hint">
-              Required for AI summaries. Paste your key from Google AI Studio or
-              set GEMINI_API_KEY in .env.local.
-            </span>
-          </label>
-
-          <div className="row">
-            <label>
-              Developer
-              <input
-                value={developerName}
-                onChange={(event) => setDeveloperName(event.target.value)}
-                onBlur={() => saveSettings({ developerName })}
-                placeholder="Your name"
-              />
-            </label>
-            <label>
-              Date
-              <input
-                type="date"
-                value={workDate}
-                onChange={(event) => setWorkDate(event.target.value)}
-              />
-            </label>
-          </div>
-
-          <label>
-            Summary style
-            <select
-              value={style}
-              onChange={(event) => {
-                setStyle(event.target.value);
-                saveSettings({ style: event.target.value });
-              }}
-            >
-              <option value="standup">Standup</option>
-              <option value="concise">Concise</option>
-              <option value="detailed">Detailed</option>
-              <option value="timesheet">Timesheet</option>
-            </select>
-          </label>
-
-          <label>
-            GitHub activity
-            <textarea
-              value={activity}
-              onChange={(event) => setActivity(event.target.value)}
-              rows={14}
-              placeholder="Paste commits, PR titles, merge notes, or git log output"
-            />
-          </label>
-
-          <button disabled={loading} type="submit">
-            {loading ? "Generating..." : "Generate Summary"}
-          </button>
-        </form>
-
-        <aside className="panel result">
-          <div>
-            <p className="eyebrow">Daily Log</p>
-            <h2>Generated summary</h2>
-          </div>
-          {error && <p className="error">{error}</p>}
-          {!error && !summary && (
-            <p className="empty">
-              Your generated work log will appear here. Use the sample activity
-              to test the first run.
-            </p>
-          )}
-          {summary && <pre>{summary}</pre>}
-
-          <div className="history">
             <div>
-              <p className="eyebrow">Saved</p>
-              <h2>Summary history</h2>
-            </div>
-            {!history.length && <p className="empty">Generated summaries save here.</p>}
-            {history.map((entry) => (
-              <article className="history-item" key={entry.id}>
-                <button type="button" onClick={() => restoreHistoryEntry(entry)}>
-                  <span>{entry.workDate}</span>
-                  <small>{entry.repos?.join(", ") || entry.style}</small>
+              <p className="eyebrow">Appearance</p>
+              <div className="theme-switch" aria-label="Theme">
+                <button
+                  className={theme === "dark" ? "active" : ""}
+                  aria-label="Use dark theme"
+                  title="Dark"
+                  type="button"
+                  onClick={() => {
+                    setTheme("dark");
+                    saveSettings({ theme: "dark" });
+                  }}
+                >
+                  <span className="theme-icon moon" aria-hidden="true" />
                 </button>
                 <button
-                  className="ghost-button"
+                  className={theme === "light" ? "active" : ""}
+                  aria-label="Use light theme"
+                  title="Light"
                   type="button"
-                  onClick={() => deleteHistoryEntry(entry.id)}
+                  onClick={() => {
+                    setTheme("light");
+                    saveSettings({ theme: "light" });
+                  }}
                 >
-                  Delete
+                  <span className="theme-icon sun" aria-hidden="true" />
                 </button>
-              </article>
-            ))}
-          </div>
-        </aside>
-      </section>
+              </div>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {view === "worklog" && (
+        <section className="workspace">
+          <form className="panel form" onSubmit={generateSummary}>
+            <div className="section">
+              <p className="eyebrow">Today</p>
+              <h2>{setupComplete ? `${selectedRepos.length} repos selected` : "Setup needed"}</h2>
+              {!setupComplete && (
+                <p className="setup-note">
+                  Add keys and repos in Settings, then return here.
+                </p>
+              )}
+              <div className="row">
+                <label>
+                  Date
+                  <input
+                    type="date"
+                    value={workDate}
+                    onChange={(event) => setWorkDate(event.target.value)}
+                  />
+                </label>
+                <button
+                  disabled={githubLoading || loading || !setupComplete}
+                  type="button"
+                  onClick={generateTodayWorklog}
+                >
+                  {githubLoading || loading ? "Working..." : "Generate Worklog"}
+                </button>
+              </div>
+              <button className="ghost-button" type="button" onClick={() => setShowActivity(!showActivity)}>
+                {showActivity ? "Hide Activity" : "Inspect Activity"}
+              </button>
+            </div>
+
+            {showActivity && (
+              <>
+                <label>
+                  GitHub activity
+                  <textarea
+                    value={activity}
+                    onChange={(event) => setActivity(event.target.value)}
+                    rows={14}
+                    placeholder="Fetched commits and PR activity appear here"
+                  />
+                </label>
+
+                <button disabled={loading || !geminiApiKey || !activity} type="submit">
+                  {loading ? "Generating..." : "Regenerate From Activity"}
+                </button>
+              </>
+            )}
+          </form>
+
+          <aside className="panel result">
+            <div>
+              <p className="eyebrow">Daily Log</p>
+              <h2>Generated summary</h2>
+            </div>
+            {error && <p className="error">{error}</p>}
+            {!error && !summary && (
+              <p className="empty">
+                Your generated work log will appear here.
+              </p>
+            )}
+            {summary && <pre>{summary}</pre>}
+
+            <div className="history">
+              <div>
+                <p className="eyebrow">Saved</p>
+                <h2>Summary history</h2>
+              </div>
+              {!history.length && <p className="empty">Generated summaries save here.</p>}
+              {history.map((entry) => (
+                <article className="history-item" key={entry.id}>
+                  <button type="button" onClick={() => restoreHistoryEntry(entry)}>
+                    <span>{entry.workDate}</span>
+                    <small>{entry.repos?.join(", ") || entry.style}</small>
+                  </button>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => deleteHistoryEntry(entry.id)}
+                  >
+                    Delete
+                  </button>
+                </article>
+              ))}
+            </div>
+          </aside>
+        </section>
+      )}
+
     </main>
   );
 }

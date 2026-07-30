@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  extractCommitAuthors,
   formatPullRequestActivity,
   formatRepositoryActivity,
   normalizeToken,
@@ -83,4 +84,43 @@ test("normalizeToken rejects non-ascii copied token text", () => {
 
 test("normalizeToken trims valid token text", () => {
   assert.equal(normalizeToken("  github_pat_abc123  "), "github_pat_abc123");
+});
+
+test("extractCommitAuthors returns unique GitHub logins first", () => {
+  const authors = extractCommitAuthors([
+    {
+      author: { login: "asha" },
+      commit: { author: { name: "Asha Local" } },
+    },
+    {
+      author: null,
+      commit: { author: { name: "Sam Local" } },
+    },
+    {
+      author: { login: "asha" },
+      commit: { author: { name: "Asha Local" } },
+    },
+  ]);
+
+  assert.deepEqual(authors, [
+    { value: "asha", label: "asha" },
+    { value: "Sam Local", label: "Sam Local" },
+  ]);
+});
+
+test("extractCommitAuthors can include authenticated user first", () => {
+  const authors = extractCommitAuthors(
+    [
+      {
+        author: { login: "sam" },
+        commit: { author: { name: "Sam Local" } },
+      },
+    ],
+    { currentUser: { login: "asha" } },
+  );
+
+  assert.deepEqual(authors, [
+    { value: "asha", label: "asha" },
+    { value: "sam", label: "sam" },
+  ]);
 });

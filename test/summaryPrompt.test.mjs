@@ -66,3 +66,22 @@ test("cleanSummaryText removes common markdown decorations", () => {
     "Overview\nFixed portfolio totals\nFollow-up",
   );
 });
+
+test("cleanSummaryText can preserve bullet markers for bullet style", () => {
+  assert.equal(
+    cleanSummaryText("**Done**\n- Fixed portfolio totals", { preserveBullets: true }),
+    "Done\n- Fixed portfolio totals",
+  );
+});
+
+test("buildSummaryPrompt supports bullet point summary style", () => {
+  const prompt = buildSummaryPrompt({
+    developerName: "Asha",
+    workDate: "2026-07-23",
+    style: "bullet-points",
+    activity: "commit abc123 add login form",
+  });
+
+  assert.match(prompt.user, /Use short plain-text bullet lines/i);
+  assert.match(prompt.user, /No Markdown bold/i);
+});

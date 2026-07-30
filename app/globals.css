@@ -93,10 +93,79 @@ body {
   color: var(--button-fg);
 }
 
+.top-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  width: 82px;
+  border: 1px solid var(--line);
+  background: var(--line);
+  justify-self: end;
+}
+
+.top-nav button {
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--muted);
+  height: 36px;
+  padding: 0;
+}
+
+.top-nav button.active {
+  background: var(--accent);
+  color: var(--button-fg);
+}
+
 .theme-icon {
   display: block;
   width: 16px;
   height: 16px;
+}
+
+.nav-icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  color: currentColor;
+}
+
+.worklog-icon {
+  border: 2px solid currentColor;
+  border-radius: 2px;
+  position: relative;
+}
+
+.worklog-icon::before,
+.worklog-icon::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  border-top: 2px solid currentColor;
+}
+
+.worklog-icon::before {
+  top: 5px;
+}
+
+.worklog-icon::after {
+  top: 10px;
+}
+
+.settings-icon {
+  border: 2px dotted currentColor;
+  border-radius: 999px;
+  position: relative;
+}
+
+.settings-icon::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
 }
 
 .theme-icon.moon {
@@ -165,6 +234,11 @@ h2 {
   align-items: start;
 }
 
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(420px, 720px);
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -185,7 +259,7 @@ h2 {
 
 .row {
   display: grid;
-  grid-template-columns: 1fr 190px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -203,6 +277,21 @@ label {
   font-size: 11px;
   font-weight: 500;
   line-height: 1.45;
+}
+
+.field-note {
+  margin: -5px 0 13px;
+}
+
+.setup-note {
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  margin: 0 0 13px;
+  padding: 10px;
 }
 
 input,
@@ -360,8 +449,14 @@ pre {
 
   .intro,
   .workspace,
+  .settings-layout,
   .row,
   .actions {
     grid-template-columns: 1fr;
+  }
+
+  .top-nav {
+    justify-self: stretch;
+    width: auto;
   }
 }

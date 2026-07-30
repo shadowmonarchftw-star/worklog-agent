@@ -78,7 +78,9 @@ export async function POST(request) {
       ?.trim();
 
     return Response.json({
-      summary: summary ? cleanSummaryText(summary) : "No summary returned.",
+      summary: summary
+        ? cleanSummaryText(summary, { preserveBullets: body.style === "bullet-points" })
+        : "No summary returned.",
       model: usedModel,
     });
   } catch (error) {
