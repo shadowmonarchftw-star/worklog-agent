@@ -1021,6 +1021,45 @@ test("status computes next run and orders success and error by completion", () =
   assert.equal(status.lastError.id, failed.attempt.id);
 });
 
+test("status keeps the latest automatic attempt separate from later manual work", () => {
+  const { first } = tempDbHandles();
+  const automatic = claim(first, {
+    trigger: "automatic",
+    ownerId: "automatic-owner",
+    now: "2026-07-30T10:00:00.000Z",
+  });
+  transitionAutomationAttempt(first, {
+    attemptId: automatic.attempt.id,
+    ownerId: "automatic-owner",
+    to: "failed",
+    now: "2026-07-30T10:01:00.000Z",
+    retryDueAt: "2026-07-30T10:16:00.000Z",
+  });
+  const manual = claim(first, {
+    trigger: "manual",
+    ownerId: "manual-owner",
+    now: "2026-07-30T10:05:00.000Z",
+  });
+  transitionAutomationAttempt(first, {
+    attemptId: manual.attempt.id,
+    ownerId: "manual-owner",
+    to: "failed",
+    now: "2026-07-30T10:06:00.000Z",
+  });
+
+  const status = getAutomationStatus(first, {
+    now: "2026-07-30T10:07:00.000Z",
+    timezone: "Asia/Kathmandu",
+  });
+
+  assert.equal(status.lastAttempt.id, manual.attempt.id);
+  assert.equal(status.lastAutomaticAttempt.id, automatic.attempt.id);
+  assert.equal(
+    status.lastAutomaticAttempt.retryDueAt,
+    "2026-07-30T10:16:00.000Z",
+  );
+});
+
 test("cleanup removes completed attempts and their old closed days after 90 days", () => {
   const { first } = tempDbHandles();
   const started = claim(first, {

@@ -177,7 +177,7 @@ function createScheduler({
       return { status };
     }
 
-    const latest = status.lastAttempt;
+    const latest = status.lastAutomaticAttempt;
     if (
       latest?.workDate === local.date &&
       latest.trigger === "automatic"
