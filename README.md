@@ -9,6 +9,20 @@ local settings.
 
 ## Windows Installation
 
+### Download the installer
+
+Open the repository's **Actions** tab, select the latest successful **Build
+Windows Installer** run, and download the `AI-Worklog-Agent-Windows` artifact.
+Extract the ZIP and run `AI Worklog Agent-Setup-0.1.0.exe`.
+
+The installer is currently unsigned. Windows SmartScreen may show an
+**Unknown publisher** warning. Click **More info**, confirm the file came from
+this repository, and choose **Run anyway**.
+
+When an installer artifact is not available, use the source installation below.
+
+### Install from source
+
 ### 1. Install the prerequisites
 
 Install:
@@ -171,3 +185,25 @@ Create a production Next.js build:
 ```bash
 npm run build
 ```
+
+Build the Windows installer on a Windows computer:
+
+```powershell
+npm run dist:win
+```
+
+The installer is written to the `release` folder.
+
+## Creating a Windows Installer on GitHub
+
+Repository maintainers can create a new installer without a Windows computer:
+
+1. Open the repository on GitHub.
+2. Select **Actions**.
+3. Select **Build Windows Installer**.
+4. Click **Run workflow** and choose the `master` branch.
+5. Wait for the workflow to finish.
+6. Open the completed run and download `AI-Worklog-Agent-Windows` under
+   **Artifacts**.
+
+Pushing a version tag such as `v0.1.0` also starts the installer workflow.
