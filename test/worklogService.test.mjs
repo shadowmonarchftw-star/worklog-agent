@@ -245,3 +245,51 @@ test("recovery detects a different sheet row as conflict without writing", async
   assert.equal(writes, 0);
   assert.equal(completions[0].errorCategory, "sheet_conflict");
 });
+
+test("recovery cleans up exactly once and preserves every reconciliation error", async () => {
+  for (const failurePoint of [
+    "interrupt", "list", "claim", "read", "restore", "complete", "release",
+  ]) {
+    const original = new Error(`failure at ${failurePoint}`);
+    let cleanupCalls = 0;
+    const fail = (point, value) => {
+      if (failurePoint === point) throw original;
+      return value;
+    };
+    const attempt = {
+      id: "attempt-1",
+      workDate: "2026-07-30",
+      intendedRow: intended,
+      intendedRowHash: rowHash(intended),
+      preWriteRowHash: "row_absent",
+      historyId: "history-1",
+    };
+
+    await assert.rejects(
+      () => recoverInterruptedRuns({
+        ownerId: "recovery",
+        lease: {
+          interruptStale: async () => fail("interrupt"),
+          listInterrupted: async () => fail("list", [attempt]),
+          claimRecovery: async () => fail("claim", { outcome: "claimed", attempt }),
+          renew: async () => true,
+          release: async () => fail("release"),
+        },
+        store: {
+          hasHistory: async () => false,
+          restoreHistory: async () => fail("restore"),
+          complete: async () => fail("complete"),
+          cleanup: async () => cleanupCalls++,
+        },
+        providers: {
+          sheets: { readRow: async () => fail("read", intended) },
+        },
+        settings,
+        tokens,
+      }),
+      (error) => error === original,
+      failurePoint,
+    );
+    assert.equal(cleanupCalls, 1, failurePoint);
+  }
+});
