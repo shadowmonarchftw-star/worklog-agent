@@ -11,6 +11,7 @@ import {
   checkpointAutomationIntent,
   checkpointAutomationPreWrite,
   claimAutomationAttempt,
+  claimAutomationRecovery,
   cleanupAutomationAttempts,
   getAutomationSettings,
   getAutomationStatus,
@@ -277,6 +278,130 @@ test("lease is five minutes, owner checked, and expired lease is acquirable", ()
   );
 });
 
+test("expired runner lease rejects every running checkpoint and terminal transition", () => {
+  {
+    const { first } = tempDbHandles();
+    insertHistory(first, "history-1");
+    const started = claim(first);
+    assert.throws(
+      () =>
+        checkpointAutomationHistory(first, {
+          attemptId: started.attempt.id,
+          ownerId: "runner",
+          historyId: "history-1",
+          now: "2026-07-30T10:05:01.000Z",
+        }),
+      /lease/,
+    );
+  }
+  {
+    const { first } = tempDbHandles();
+    const started = claim(first);
+    assert.throws(
+      () =>
+        checkpointAutomationIntent(first, {
+          attemptId: started.attempt.id,
+          ownerId: "runner",
+          intendedRow: { date: "2026-07-30" },
+          now: "2026-07-30T10:05:01.000Z",
+        }),
+      /lease/,
+    );
+  }
+  {
+    const { first } = tempDbHandles();
+    const started = claim(first);
+    checkpointAutomationIntent(first, {
+      attemptId: started.attempt.id,
+      ownerId: "runner",
+      intendedRow: { date: "2026-07-30" },
+      now: "2026-07-30T10:01:00.000Z",
+    });
+    assert.throws(
+      () =>
+        checkpointAutomationPreWrite(first, {
+          attemptId: started.attempt.id,
+          ownerId: "runner",
+          preWriteRowHash: "row_absent",
+          now: "2026-07-30T10:05:01.000Z",
+        }),
+      /lease/,
+    );
+  }
+  {
+    const { first } = tempDbHandles();
+    const started = claim(first);
+    assert.throws(
+      () =>
+        transitionAutomationAttempt(first, {
+          attemptId: started.attempt.id,
+          ownerId: "runner",
+          to: "failed",
+          now: "2026-07-30T10:05:01.000Z",
+        }),
+      /lease/,
+    );
+  }
+});
+
+test("interrupted recovery requires a separately claimed live recovery lease", () => {
+  const { first } = tempDbHandles();
+  const started = claim(first);
+  interruptStaleAttempts(first, { now: "2026-07-30T10:30:00.000Z" });
+
+  assert.throws(
+    () =>
+      transitionAutomationAttempt(first, {
+        attemptId: started.attempt.id,
+        ownerId: "recovery",
+        to: "success",
+        now: "2026-07-30T10:31:00.000Z",
+      }),
+    /lease/,
+  );
+  assert.equal(
+    claimAutomationRecovery(first, {
+      attemptId: started.attempt.id,
+      ownerId: "recovery",
+      now: "2026-07-30T10:31:00.000Z",
+    }).outcome,
+    "claimed",
+  );
+  assert.equal(
+    transitionAutomationAttempt(first, {
+      attemptId: started.attempt.id,
+      ownerId: "recovery",
+      to: "success",
+      now: "2026-07-30T10:32:00.000Z",
+    }).status,
+    "success",
+  );
+
+  const second = claim(first, {
+    workDate: "2026-07-31",
+    ownerId: "second",
+    since: "2026-07-30T18:15:00.000Z",
+    until: "2026-07-31T18:15:00.000Z",
+    now: "2026-07-30T10:33:00.000Z",
+  });
+  interruptStaleAttempts(first, { now: "2026-07-30T11:03:00.000Z" });
+  claimAutomationRecovery(first, {
+    attemptId: second.attempt.id,
+    ownerId: "expired-recovery",
+    now: "2026-07-30T11:04:00.000Z",
+  });
+  assert.throws(
+    () =>
+      transitionAutomationAttempt(first, {
+        attemptId: second.attempt.id,
+        ownerId: "expired-recovery",
+        to: "failed",
+        now: "2026-07-30T11:09:01.000Z",
+      }),
+    /lease/,
+  );
+});
+
 test("stale sweep uses thirty minutes independently of lease expiry", () => {
   const { first } = tempDbHandles();
   const started = claim(first);
@@ -454,7 +579,7 @@ test("checkpoints require running owner and prewrite requires intended row", () 
         intendedRow: {},
         now: T0,
       }),
-    /owner/,
+    /lease/,
   );
 });
 
@@ -498,7 +623,7 @@ test("history checkpoint is running-owner checked, immutable, and idempotent", (
         historyId: "history-1",
         now: "2026-07-30T10:01:03.000Z",
       }),
-    /owner/,
+    /lease/,
   );
 });
 
@@ -526,6 +651,11 @@ test("audit fields reject replacement and allow idempotent interrupted recovery"
     "2026-07-30T10:31:00.000Z",
     started.attempt.id,
   );
+  claimAutomationRecovery(first, {
+    attemptId: started.attempt.id,
+    ownerId: "recovery",
+    now: "2026-07-30T10:31:00.000Z",
+  });
 
   for (const conflicting of [
     { historyId: "history-2" },
@@ -538,6 +668,7 @@ test("audit fields reject replacement and allow idempotent interrupted recovery"
         transitionAutomationAttempt(first, {
           attemptId: started.attempt.id,
           to: "success",
+          ownerId: "recovery",
           now: "2026-07-30T10:32:00.000Z",
           ...conflicting,
         }),
@@ -548,6 +679,7 @@ test("audit fields reject replacement and allow idempotent interrupted recovery"
   const recovered = transitionAutomationAttempt(first, {
     attemptId: started.attempt.id,
     to: "success",
+    ownerId: "recovery",
     now: "2026-07-30T10:32:00.000Z",
     historyId: "history-1",
     retryDueAt: "2026-07-30T10:10:00.000Z",
@@ -576,6 +708,13 @@ test("full transition matrix accepts only running terminals and recovery outcome
           `UPDATE automation_lease
            SET owner_id = NULL, attempt_id = NULL, expires_at = NULL`,
         ).run();
+        if (from === "interrupted") {
+          claimAutomationRecovery(first, {
+            attemptId: started.attempt.id,
+            ownerId: "recovery",
+            now: "2026-07-30T10:06:00.000Z",
+          });
+        }
       }
       const allowed =
         (from === "running" && ["success", "no_activity", "failed"].includes(to)) ||
@@ -584,8 +723,10 @@ test("full transition matrix accepts only running terminals and recovery outcome
         transitionAutomationAttempt(first, {
           attemptId: started.attempt.id,
           to,
-          ownerId: from === "running" ? "runner" : undefined,
-          now: "2026-07-30T10:01:00.000Z",
+          ownerId: from === "running" ? "runner" : "recovery",
+          now: from === "interrupted"
+            ? "2026-07-30T10:07:00.000Z"
+            : "2026-07-30T10:01:00.000Z",
         });
       if (allowed) assert.doesNotThrow(action, `${from} -> ${to}`);
       else assert.throws(action, /transition/, `${from} -> ${to}`);
@@ -619,12 +760,18 @@ test("recovery transitions preserve checkpoint evidence and reject overwrite inp
     `UPDATE automation_attempts
      SET status = 'interrupted', completed_at = ? WHERE id = ?`,
   ).run("2026-07-30T10:32:00.000Z", started.attempt.id);
+  claimAutomationRecovery(first, {
+    attemptId: started.attempt.id,
+    ownerId: "recovery",
+    now: "2026-07-30T10:32:00.000Z",
+  });
 
   assert.throws(
     () =>
       transitionAutomationAttempt(first, {
         attemptId: started.attempt.id,
         to: "success",
+        ownerId: "recovery",
         now: "2026-07-30T10:33:00.000Z",
         intendedRow: { ...intendedRow, summary: "Changed" },
       }),
@@ -633,6 +780,7 @@ test("recovery transitions preserve checkpoint evidence and reject overwrite inp
   const recovered = transitionAutomationAttempt(first, {
     attemptId: started.attempt.id,
     to: "success",
+    ownerId: "recovery",
     now: "2026-07-30T10:33:00.000Z",
     sheetAction: "append",
     sheetRow: 14,
@@ -710,7 +858,7 @@ test("status computes next run and orders success and error by completion", () =
   const failed = claim(first, {
     workDate: "2026-07-30",
     ownerId: "failed",
-    now: "2026-07-30T09:00:00.000Z",
+    now: "2026-07-30T10:02:30.000Z",
   });
   transitionAutomationAttempt(first, {
     attemptId: failed.attempt.id,
