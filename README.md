@@ -18,7 +18,7 @@ local settings.
    failed builds and can be ignored.
 5. Scroll to **Artifacts** and download `AI-Worklog-Agent-Windows`.
 6. Extract the downloaded ZIP.
-7. Run `AI Worklog Agent-Setup-0.1.4.exe`.
+7. Run `AI Worklog Agent-Setup-0.1.5.exe`.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
@@ -284,7 +284,7 @@ Repository maintainers can create a new installer without a Windows computer:
 6. Open the completed run and download `AI-Worklog-Agent-Windows` under
    **Artifacts**.
 
-Pushing a version tag such as `v0.1.4` also starts the installer workflow.
+Pushing a version tag such as `v0.1.5` also starts the installer workflow.
 
 ## Creating macOS Installers on GitHub
 

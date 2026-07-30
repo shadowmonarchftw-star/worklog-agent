@@ -1,6 +1,6 @@
 {
   "name": "ai-worklog-agent",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Local desktop agent for GitHub-based daily worklogs",
   "author": "AI Worklog Agent",
   "private": true,
@@ -33,14 +33,12 @@
     "directories": {
       "output": "release"
     },
+    "asar": false,
     "files": [
       "electron/**/*",
       ".next/**/*",
       "next.config.mjs",
       "package.json"
-    ],
-    "asarUnpack": [
-      "node_modules/better-sqlite3/**/*"
     ],
     "win": {
       "target": [
