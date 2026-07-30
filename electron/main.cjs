@@ -1,6 +1,7 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
+const { registerExternalLinkHandler } = require("./external-links.cjs");
 
 const appUrl = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
 let nextProcess;
@@ -54,6 +55,8 @@ async function createWindow() {
       nodeIntegration: false,
     },
   });
+
+  registerExternalLinkHandler(window, (url) => shell.openExternal(url));
 
   await waitForAppUrl();
   await window.loadURL(appUrl);

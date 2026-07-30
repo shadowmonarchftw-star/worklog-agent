@@ -8,6 +8,13 @@ export default function Home() {
   const [githubToken, setGithubToken] = useState("");
   const [githubAuthor, setGithubAuthor] = useState("");
   const [githubAuthors, setGithubAuthors] = useState([]);
+  const [googleSheetLink, setGoogleSheetLink] = useState("");
+  const [googleClientId, setGoogleClientId] = useState("");
+  const [googleClientSecret, setGoogleClientSecret] = useState("");
+  const [googleSheetTab, setGoogleSheetTab] = useState("Sheet1");
+  const [defaultHours, setDefaultHours] = useState("8");
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [sheetStatus, setSheetStatus] = useState("");
   const [repos, setRepos] = useState([]);
   const [selectedRepos, setSelectedRepos] = useState([]);
   const [developerName, setDeveloperName] = useState("");
@@ -37,8 +44,13 @@ export default function Home() {
         setGeminiApiKey(settings.geminiApiKey || "");
         setGithubToken(settings.githubToken || "");
         setGithubAuthor(settings.githubAuthor || "");
+        setGoogleSheetLink(settings.googleSheetLink || "");
+        setGoogleClientId(settings.googleClientId || "");
+        setGoogleClientSecret(settings.googleClientSecret || "");
+        setGoogleSheetTab(settings.googleSheetTab || "Sheet1");
+        setDefaultHours(settings.defaultHours || "8");
         setDeveloperName(settings.developerName || "");
-        setStyle(settings.style || "standup");
+        setStyle(settings.style === "timesheet" ? "sheet-cell" : settings.style || "standup");
         setTheme(settings.theme || "dark");
         setSelectedRepos(settings.selectedRepos || []);
         if (settings.githubToken && settings.selectedRepos?.length) {
@@ -52,10 +64,25 @@ export default function Home() {
         const { history } = await historyResponse.json();
         setHistory(history);
       }
+
+      loadGoogleStatus();
     }
 
     loadLocalData();
   }, []);
+
+  useEffect(() => {
+    window.addEventListener("focus", loadGoogleStatus);
+    return () => window.removeEventListener("focus", loadGoogleStatus);
+  }, []);
+
+  async function loadGoogleStatus() {
+    const response = await fetch("/api/google/status");
+    if (response.ok) {
+      const data = await response.json();
+      setGoogleConnected(Boolean(data.connected));
+    }
+  }
 
   async function saveSettings(nextSettings = {}) {
     await fetch("/api/local/settings", {
@@ -66,6 +93,11 @@ export default function Home() {
           geminiApiKey,
           githubToken,
           githubAuthor,
+          googleSheetLink,
+          googleClientId,
+          googleClientSecret,
+          googleSheetTab,
+          defaultHours,
           developerName,
           style,
           theme,
@@ -202,7 +234,61 @@ export default function Home() {
       const { history } = await historyResponse.json();
       setHistory(history);
     }
-    saveSettings();
+    await saveSettings();
+    await writeSummaryToSheet(data.summary);
+  }
+
+  async function connectGoogle() {
+    setError("");
+    setSheetStatus("Opening Google...");
+    await saveSettings({
+      googleClientId,
+      googleClientSecret,
+      googleSheetLink,
+      googleSheetTab,
+      defaultHours,
+    });
+
+    const response = await fetch("/api/google/auth-url");
+    const data = await response.json();
+
+    if (!response.ok) {
+      setSheetStatus("");
+      setError(data.error || "Could not start Google connection.");
+      return;
+    }
+
+    window.open(data.url, "_blank", "width=720,height=780");
+    setSheetStatus("Finish Google login, then come back here.");
+    setTimeout(loadGoogleStatus, 2500);
+  }
+
+  async function writeSummaryToSheet(nextSummary) {
+    if (!googleSheetLink || !googleConnected || !nextSummary) {
+      if (googleSheetLink && !googleConnected) {
+        setSheetStatus("Google Sheet set. Connect Google in Settings to auto-write.");
+      }
+      return;
+    }
+
+    setSheetStatus("Writing to Google Sheet...");
+    const response = await fetch("/api/google/write-summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workDate,
+        summary: nextSummary,
+        reference: selectedRepos.join(", "),
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      setSheetStatus(data.error || "Could not write to Google Sheet.");
+      return;
+    }
+
+    setSheetStatus(data.action === "updated" ? `Updated Google Sheet row ${data.rowNumber}.` : "Added row to Google Sheet.");
   }
 
   async function generateSummary(event) {
@@ -357,7 +443,8 @@ export default function Home() {
                   <option value="standup">Standup</option>
                   <option value="concise">Concise</option>
                   <option value="detailed">Detailed</option>
-                  <option value="timesheet">Timesheet</option>
+                  <option value="sheet-cell">Sheet cell</option>
+                  <option value="time-wise">Time-wise</option>
                   <option value="bullet-points">Bullet points</option>
                 </select>
               </label>
@@ -384,6 +471,76 @@ export default function Home() {
                   ))}
                 </div>
               </label>
+            </div>
+
+            <div className="section">
+              <p className="eyebrow">Google Sheet</p>
+              <div className="row">
+                <label>
+                  Google Client ID
+                  <input
+                    value={googleClientId}
+                    onChange={(event) => setGoogleClientId(event.target.value)}
+                    onBlur={() => saveSettings({ googleClientId })}
+                    placeholder="OAuth client ID"
+                    autoComplete="off"
+                  />
+                </label>
+                <label>
+                  Google Client Secret
+                  <input
+                    type="password"
+                    value={googleClientSecret}
+                    onChange={(event) => setGoogleClientSecret(event.target.value)}
+                    onBlur={() => saveSettings({ googleClientSecret })}
+                    placeholder="OAuth client secret"
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+              <label>
+                Current month sheet link
+                <input
+                  value={googleSheetLink}
+                  onChange={(event) => setGoogleSheetLink(event.target.value)}
+                  onBlur={() => saveSettings({ googleSheetLink })}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                />
+                <span className="hint">
+                  Update this when office worklog sheet changes each month.
+                </span>
+              </label>
+              <div className="row compact-row">
+                <label>
+                  Sheet tab
+                  <input
+                    value={googleSheetTab}
+                    onChange={(event) => setGoogleSheetTab(event.target.value)}
+                    onBlur={() => saveSettings({ googleSheetTab })}
+                    placeholder="Sheet1"
+                  />
+                </label>
+                <label>
+                  Default hours
+                  <input
+                    value={defaultHours}
+                    onChange={(event) => setDefaultHours(event.target.value)}
+                    onBlur={() => saveSettings({ defaultHours })}
+                    placeholder="8"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                disabled={!googleClientId || !googleClientSecret}
+                onClick={connectGoogle}
+              >
+                {googleConnected ? "Reconnect Google" : "Connect Google"}
+              </button>
+              <p className="hint field-note">
+                {googleConnected ? "Google connected. Summaries write after generation." : "Not connected yet."}
+              </p>
+              {sheetStatus && <p className="hint field-note">{sheetStatus}</p>}
             </div>
 
             <div>
@@ -483,6 +640,7 @@ export default function Home() {
               </p>
             )}
             {summary && <pre>{summary}</pre>}
+            {sheetStatus && <p className="hint field-note">{sheetStatus}</p>}
 
             <div className="history">
               <div>

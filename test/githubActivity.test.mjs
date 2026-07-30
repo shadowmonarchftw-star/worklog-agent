@@ -24,7 +24,7 @@ test("formatCommitActivity groups commits under the repo name", () => {
   });
 
   assert.match(activity, /repo: owner\/app/);
-  assert.match(activity, /commit 1234567 fix dashboard export state/);
+  assert.match(activity, /10:00 commit 1234567 fix dashboard export state/);
   assert.match(activity, /by Asha/);
   assert.doesNotMatch(activity, /extra details/);
 });
@@ -123,4 +123,21 @@ test("extractCommitAuthors can include authenticated user first", () => {
     { value: "asha", label: "asha" },
     { value: "sam", label: "sam" },
   ]);
+});
+
+test("formatRepositoryActivity includes local time from commit author date", () => {
+  const activity = formatRepositoryActivity({
+    repoFullName: "owner/app",
+    commits: [
+      {
+        sha: "abcdef1234567890",
+        commit: {
+          message: "restore rate data",
+          author: { name: "Asha", date: "2026-07-23T14:35:00Z" },
+        },
+      },
+    ],
+  });
+
+  assert.match(activity, /14:35 commit abcdef1 restore rate data/);
 });

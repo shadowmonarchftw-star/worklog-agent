@@ -85,3 +85,15 @@ test("buildSummaryPrompt supports bullet point summary style", () => {
   assert.match(prompt.user, /Use short plain-text bullet lines/i);
   assert.match(prompt.user, /No Markdown bold/i);
 });
+
+test("buildSummaryPrompt supports time-wise summary style", () => {
+  const prompt = buildSummaryPrompt({
+    developerName: "Asha",
+    workDate: "2026-07-23",
+    style: "time-wise",
+    activity: "commit abc123 add login form",
+  });
+
+  assert.match(prompt.user, /Morning, Afternoon, and Evening/i);
+  assert.match(prompt.user, /actual commit timestamps/i);
+});
