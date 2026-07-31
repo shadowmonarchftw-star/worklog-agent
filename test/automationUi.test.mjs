@@ -22,3 +22,14 @@ test("Settings exposes complete automatic worklog controls", async () => {
   assert.match(source, /getAutomationStatus/);
   assert.match(source, /runAutomation/);
 });
+
+test("Settings exposes GitHub and local repository activity sources", async () => {
+  const [settings, preload] = await Promise.all([
+    readFile(new URL("../app/components/SettingsView.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(settings, /Local repositories/);
+  assert.match(settings, /Additional author emails/);
+  assert.match(preload, /chooseLocalRepository/);
+  assert.match(preload, /inspectLocalRepository/);
+});

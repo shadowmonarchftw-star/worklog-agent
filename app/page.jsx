@@ -28,6 +28,8 @@ export default function Home() {
   const [sheetStatus, setSheetStatus] = useState("");
   const [repos, setRepos] = useState([]);
   const [selectedRepos, setSelectedRepos] = useState([]);
+  const [activitySource, setActivitySource] = useState("github");
+  const [localRepositories, setLocalRepositories] = useState([]);
   const [workDate, setWorkDate] = useState(() => localDateAt());
   const [style, setStyle] = useState("standup");
   const [theme, setTheme] = useState("dark");
@@ -54,9 +56,10 @@ export default function Home() {
   const initializedRef = useRef(false);
   const suppressResetRef = useRef(false);
 
-  const setupComplete = Boolean(
-    githubToken && geminiApiKey && githubAuthor && selectedRepos.length,
-  );
+  const sourceComplete = activitySource === "local"
+    ? localRepositories.length > 0
+    : githubToken && githubAuthor && selectedRepos.length;
+  const setupComplete = Boolean(geminiApiKey && sourceComplete);
   const desktopAvailable = typeof window !== "undefined" &&
     Boolean(window.worklogDesktop?.runAutomation);
   const automationReady = Boolean(
@@ -65,7 +68,7 @@ export default function Home() {
   const automationUnavailableMessage = !desktopAvailable
     ? "Desktop app required to test automation."
     : !setupComplete
-      ? "Complete GitHub and Gemini setup before enabling automation."
+      ? `Complete ${activitySource === "local" ? "Local Git" : "GitHub"} and Gemini setup before enabling automation.`
       : !googleConnected || !googleSheetLink
         ? "Connect Google Sheets before enabling automation."
         : "";
@@ -74,6 +77,8 @@ export default function Home() {
     githubAuthor,
     githubToken,
     selectedRepos,
+    activitySource,
+    localRepositories,
   });
 
   useEffect(() => {
@@ -97,6 +102,8 @@ export default function Home() {
         setStyle(settings.style === "timesheet" ? "sheet-cell" : settings.style || "standup");
         setTheme(settings.theme || "dark");
         setSelectedRepos(settings.selectedRepos || []);
+        setActivitySource(settings.activitySource || "github");
+        setLocalRepositories(settings.localRepositories || []);
         if (settings.githubToken) {
           void loadAuthors(settings.selectedRepos || [], settings.githubToken);
         }
@@ -167,6 +174,8 @@ export default function Home() {
           style,
           theme,
           selectedRepos,
+          activitySource,
+          localRepositories,
           ...nextSettings,
         },
       }),
@@ -275,6 +284,39 @@ export default function Home() {
     void loadAuthors(nextSelectedRepos);
   }
 
+  async function addLocalRepository() {
+    if (!window.worklogDesktop?.chooseLocalRepository) {
+      setError("Local repositories can only be added in the desktop app.");
+      return;
+    }
+    try {
+      const selectedPath = await window.worklogDesktop.chooseLocalRepository();
+      if (!selectedPath) return;
+      const repository = await window.worklogDesktop.inspectLocalRepository(selectedPath);
+      const next = [
+        ...localRepositories.filter((item) => item.path !== repository.path),
+        repository,
+      ];
+      setLocalRepositories(next);
+      await saveSettings({ localRepositories: next });
+    } catch (nextError) {
+      setError(nextError.message || "Could not add local repository.");
+    }
+  }
+
+  function removeLocalRepository(id) {
+    const next = localRepositories.filter((repo) => repo.id !== id);
+    setLocalRepositories(next);
+    void saveSettings({ localRepositories: next });
+  }
+
+  function updateLocalRepository(id, patch) {
+    const next = localRepositories.map((repo) =>
+      repo.id === id ? { ...repo, ...patch } : repo);
+    setLocalRepositories(next);
+    void saveSettings({ localRepositories: next });
+  }
+
   async function fetchGithubActivity({ reveal = false } = {}) {
     const requestId = ++requestIdRef.current;
     const started = { requestId, inputKey: currentInputKey };
@@ -289,6 +331,8 @@ export default function Home() {
         repoFullNames: selectedRepos,
         date: workDate,
         author: githubAuthor,
+        activitySource,
+        localRepositories,
       }),
     });
     const data = await response.json();
@@ -299,6 +343,10 @@ export default function Home() {
         githubAuthor,
         githubToken,
         selectedRepos,
+        activitySource,
+        localRepositories,
+        activitySource,
+        localRepositories,
       }),
     };
     if (!isCurrentActivityRequest(started, current)) return null;
@@ -356,7 +404,9 @@ export default function Home() {
     const entry = createHistoryEntry({
       workDate,
       style,
-      selectedRepos,
+      selectedRepos: activitySource === "local"
+        ? localRepositories.map((repo) => repo.displayName)
+        : selectedRepos,
       activity: activityResult.activity,
       summary: data.summary,
     });
@@ -380,7 +430,11 @@ export default function Home() {
     if (!result) return;
     if (!hasWorkActivity(result)) {
       setShowActivity(true);
-      setError("No commits or pull requests were found for the selected date.");
+      setError(
+        activitySource === "local"
+          ? "No matching local commits were found for the selected date."
+          : "No commits or pull requests were found for the selected date.",
+      );
       return;
     }
     await generateSummaryFromActivity(result);
@@ -417,7 +471,13 @@ export default function Home() {
     const response = await fetch("/api/google/write-summary", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workDate, summary: nextSummary, reference: selectedRepos.join(", ") }),
+      body: JSON.stringify({
+        workDate,
+        summary: nextSummary,
+        reference: activitySource === "local"
+          ? localRepositories.map((repo) => repo.displayName).join(", ")
+          : selectedRepos.join(", "),
+      }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -435,6 +495,8 @@ export default function Home() {
         githubAuthor,
         githubToken,
         selectedRepos: entry.repos || [],
+        activitySource,
+        localRepositories,
       }) !== currentInputKey;
     setWorkDate(entry.workDate);
     setStyle(entry.style);
@@ -478,6 +540,8 @@ export default function Home() {
     githubAuthors,
     githubLoading,
     githubToken,
+    activitySource,
+    localRepositories,
     googleClientId,
     googleClientSecret,
     googleConnected,
@@ -494,6 +558,13 @@ export default function Home() {
     onGoogleSheetLinkChange: setGoogleSheetLink,
     onGoogleSheetTabChange: setGoogleSheetTab,
     onLoadRepos: loadRepos,
+    onAddLocalRepository: addLocalRepository,
+    onActivitySourceChange: (value) => {
+      setActivitySource(value);
+      void saveSettings({ activitySource: value });
+    },
+    onRemoveLocalRepository: removeLocalRepository,
+    onUpdateLocalRepository: updateLocalRepository,
     onRunNow: runAutomationNow,
     onSave: saveSettings,
     onStyleChange: setStyle,
@@ -522,6 +593,7 @@ export default function Home() {
           commitCount={commitCount}
           error={error}
           githubAuthor={githubAuthor}
+          activitySource={activitySource}
           history={history}
           loading={loading}
           onCopy={() => navigator.clipboard.writeText(summary)}
@@ -533,6 +605,7 @@ export default function Home() {
           onWorkDateChange={setWorkDate}
           pullRequestCount={pullRequestCount}
           selectedRepos={selectedRepos}
+          localRepositories={localRepositories}
           setupComplete={setupComplete}
           sheetStatus={sheetStatus}
           showActivity={showActivity}

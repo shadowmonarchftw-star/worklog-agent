@@ -23,11 +23,13 @@ const styleLabels = {
 
 export function DashboardView({
   activity,
+  activitySource,
   commitCount,
   error,
   githubAuthor,
   history,
   loading,
+  localRepositories,
   onCopy,
   onDeleteHistory,
   onGenerate,
@@ -45,20 +47,23 @@ export function DashboardView({
   workDate,
 }) {
   const busy = loading === "activity" || loading === "summary";
+  const monitoredCount = activitySource === "local"
+    ? localRepositories.length
+    : selectedRepos.length;
 
   return (
     <>
       <PageHeader
         eyebrow="Dashboard / Daily worklog"
         title="Daily worklog"
-        subtitle="Turn selected GitHub activity into a clean office-ready update."
-        badge={githubAuthor || "Commit author not selected"}
+        subtitle={`Turn selected ${activitySource === "local" ? "local Git" : "GitHub"} activity into a clean office-ready update.`}
+        badge={activitySource === "local" ? "Local commits" : githubAuthor || "Commit author not selected"}
       />
 
       <div className="page-scroll">
         <div className="dashboard">
           <section className="metric-grid" aria-label="Worklog statistics">
-            <Metric label="Monitored repos" value={selectedRepos.length} icon={Layers3} />
+            <Metric label="Monitored repos" value={monitoredCount} icon={Layers3} />
             <Metric label="Commits selected date" value={commitCount} icon={GitCommitHorizontal} />
             <Metric label="Pull requests" value={pullRequestCount} icon={GitPullRequest} />
             <Metric label="Summaries saved" value={history.length} icon={FileText} />
@@ -68,7 +73,7 @@ export function DashboardView({
             <section className="setup-banner">
               <div>
                 <strong>Finish setup before generating</strong>
-                <p>Add GitHub, Gemini, an author, and at least one repository.</p>
+                <p>Add Gemini and finish the selected activity-source setup.</p>
               </div>
               <button className="secondary-button" type="button" onClick={onOpenSettings}>
                 Open Settings
@@ -89,7 +94,7 @@ export function DashboardView({
               <span className="field-label">Scope</span>
               <div className="scope-value">
                 <Layers3 size={15} />
-                <span>{selectedRepos.length} {selectedRepos.length === 1 ? "repo" : "repos"} selected</span>
+                <span>{monitoredCount} {monitoredCount === 1 ? "repo" : "repos"} selected</span>
               </div>
             </div>
             <button

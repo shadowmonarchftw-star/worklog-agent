@@ -19,6 +19,7 @@ import {
 } from "../../../../lib/automationHttp.mjs";
 import { geminiProvider } from "../../../../lib/geminiProvider.mjs";
 import { githubProvider } from "../../../../lib/githubProvider.mjs";
+import { localGitProvider } from "../../../../lib/localGitProvider.mjs";
 import { googleSheetsProvider } from "../../../../lib/googleSheetsProvider.mjs";
 import {
   getAppDb,
@@ -132,6 +133,9 @@ export async function loadAutomationInput(body = {}) {
   const settings = getSetting(db, "app-settings") || {};
   const providers = {
     github: githubProvider,
+    activity: (settings.activitySource || "github") === "local"
+      ? localGitProvider
+      : githubProvider,
     gemini: geminiProvider,
     sheets: {
       ...googleSheetsProvider,

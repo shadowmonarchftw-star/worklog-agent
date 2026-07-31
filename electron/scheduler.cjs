@@ -59,12 +59,15 @@ function sanitize(value) {
 }
 
 function notificationFor(result) {
+  const warning = result?.warnings?.[0];
   if (result?.status === "success") {
     return {
       title: "Worklog complete",
       body: result.action === "appended"
         ? "Today's worklog was added."
-        : "Today's worklog was updated.",
+        : warning
+          ? `Today's worklog was updated. ${warning}`
+          : "Today's worklog was updated.",
     };
   }
   if (result?.status === "no_activity") {

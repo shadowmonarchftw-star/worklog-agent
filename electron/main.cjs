@@ -1,6 +1,7 @@
 const {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   nativeImage,
@@ -17,9 +18,14 @@ const { createScheduler } = require("./scheduler.cjs");
 const { createShutdownHandler } = require("./shutdown.cjs");
 const {
   loginItemFor,
+  normalizeDirectorySelection,
   shouldKeepAlive,
   shouldStartHidden,
 } = require("./lifecycle.cjs");
+
+if (process.env.WORKLOG_AGENT_SMOKE_USER_DATA) {
+  app.setPath("userData", process.env.WORKLOG_AGENT_SMOKE_USER_DATA);
+}
 
 let appServer;
 let appUrl;
@@ -195,6 +201,20 @@ ipcMain.handle("automation:save-settings", async (_event, patch) => {
   });
   await reconcileAutomationSettings(data.settings);
   return data;
+});
+ipcMain.handle("local-git:choose-repository", async () => {
+  const result = await dialog.showOpenDialog(mainWindow || undefined, {
+    properties: ["openDirectory"],
+    title: "Choose a local Git repository",
+  });
+  return normalizeDirectorySelection(result);
+});
+ipcMain.handle("local-git:inspect-repository", async (_event, repositoryPath) => {
+  if (typeof repositoryPath !== "string" || !repositoryPath.trim()) {
+    throw new Error("Choose a repository folder.");
+  }
+  const { inspectLocalRepository } = await import("../lib/localGitProvider.mjs");
+  return inspectLocalRepository(repositoryPath);
 });
 
 app.on("window-all-closed", () => {

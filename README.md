@@ -214,6 +214,23 @@ asleep at the scheduled time, the agent performs one same-day catch-up after
 waking. A successful day or a day with no GitHub activity is not repeated
 automatically.
 
+## Using Local Commits
+
+The desktop app can generate worklogs from commits on your computer without
+reading GitHub:
+
+1. Install Git and make sure the `git` command is available.
+2. Open **Settings > Git activity**.
+3. Select **Local repositories**.
+4. Click **Add repository** and choose each repository folder.
+5. Confirm the detected Git name and email. Add alternate author emails only
+   when older commits used another account.
+
+Local mode reads completed commits from every local branch, including commits
+that have not been pushed. It ignores staged, unstaged, and untracked changes.
+Each repository uses its own Git identity, so company and personal accounts can
+be included safely in the same worklog.
+
 ## Local Data
 
 Settings, credentials, Google tokens, and summary history are stored locally:

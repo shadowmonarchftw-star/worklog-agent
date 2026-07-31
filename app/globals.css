@@ -45,6 +45,60 @@
   box-shadow: inset 16px 0 0 1px var(--panel);
 }
 
+.source-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--border);
+}
+
+.source-selector button {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+}
+
+.source-selector button + button {
+  border-left: 1px solid var(--border);
+}
+
+.source-selector button.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.local-repo-list {
+  display: grid;
+  gap: 10px;
+}
+
+.local-repo-item {
+  border: 1px solid var(--border);
+  padding: 14px;
+}
+
+.local-repo-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.local-repo-heading div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.local-repo-heading span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .automation-schedule {
   display: grid;
   gap: 14px;

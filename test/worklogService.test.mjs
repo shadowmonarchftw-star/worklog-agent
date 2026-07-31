@@ -103,6 +103,26 @@ test("incomplete setup is a typed validation failure before claiming", async () 
   assert.deepEqual(h.calls, []);
 });
 
+test("local source preflights before claiming and does not require GitHub credentials", async () => {
+  const h = harness({
+    settings: {
+      ...settings,
+      activitySource: "local",
+      githubToken: "",
+      githubAuthor: "",
+      selectedRepos: [],
+      localRepositories: [{ displayName: "app", path: "/repo" }],
+      reference: "GitHub",
+    },
+  });
+  h.args.providers.activity = {
+    preflight: async () => h.calls.push("preflight"),
+    collectActivity: h.args.providers.github.collectActivity,
+  };
+  await executeWorklog(h.args);
+  assert.deepEqual(h.calls.slice(0, 2), ["preflight", "claim"]);
+});
+
 test("success follows the exact durable side-effect sequence", async () => {
   const h = harness();
   const result = await executeWorklog(h.args);

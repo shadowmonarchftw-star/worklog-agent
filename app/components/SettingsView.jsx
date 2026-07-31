@@ -4,12 +4,14 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
+  FolderGit2,
   GitFork,
   KeyRound,
   MonitorCog,
   RefreshCw,
   Sparkles,
   Table2,
+  Trash2,
 } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "./DashboardView";
@@ -17,7 +19,7 @@ import { AutomationSection } from "./AutomationSection";
 
 const sections = [
   { id: "credentials", label: "Credentials", icon: KeyRound },
-  { id: "github", label: "GitHub", icon: GitFork },
+  { id: "github", label: "Git activity", icon: GitFork },
   { id: "google", label: "Google Sheets", icon: Table2 },
   { id: "automation", label: "Automation", icon: Clock3 },
   { id: "output", label: "Output", icon: Sparkles },
@@ -77,6 +79,7 @@ function SettingsPanel({ children, description, title }) {
 }
 
 function CredentialsSection({
+  activitySource,
   geminiApiKey,
   githubToken,
   onGeminiApiKeyChange,
@@ -85,6 +88,7 @@ function CredentialsSection({
 }) {
   return (
     <SettingsPanel title="Credentials" description="Stored locally in SQLite and never included in summaries.">
+      {activitySource === "github" && (
       <SettingsField label="GitHub fine-grained token" hint="Used to read repositories, commits, and pull requests.">
         <input
           type="password"
@@ -95,6 +99,7 @@ function CredentialsSection({
           onBlur={() => onSave({ githubToken })}
         />
       </SettingsField>
+      )}
       <SettingsField label="Gemini API key" hint="Used only when generating a worklog summary.">
         <input
           type="password"
@@ -110,18 +115,68 @@ function CredentialsSection({
 }
 
 function GithubSection({
+  activitySource,
   githubAuthor,
   githubAuthors,
   githubLoading,
   githubToken,
+  localRepositories,
+  onActivitySourceChange,
+  onAddLocalRepository,
   onAuthorChange,
   onLoadRepos,
+  onRemoveLocalRepository,
   onToggleRepo,
+  onUpdateLocalRepository,
   repos,
   selectedRepos,
 }) {
   return (
-    <SettingsPanel title="GitHub" description="Choose your identity and the repositories included in each worklog.">
+    <SettingsPanel title="Git activity" description="Choose one source for commits included in each worklog.">
+      <div className="source-selector" role="group" aria-label="Activity source">
+        <button className={activitySource === "github" ? "active" : ""} type="button" onClick={() => onActivitySourceChange("github")}>GitHub</button>
+        <button className={activitySource === "local" ? "active" : ""} type="button" onClick={() => onActivitySourceChange("local")}>Local repositories</button>
+      </div>
+
+      {activitySource === "local" ? (
+        <>
+          <div className="settings-action-row">
+            <div><strong>Local repositories</strong><span>Committed work from all local branches. Working-tree changes are ignored.</span></div>
+            <button className="secondary-button" type="button" onClick={onAddLocalRepository}>
+              <FolderGit2 size={15} />
+              Add repository
+            </button>
+          </div>
+          <div className="local-repo-list">
+            {!localRepositories.length && <p className="settings-empty">No local repositories selected.</p>}
+            {localRepositories.map((repo) => (
+              <article className="local-repo-item" key={repo.id}>
+                <div className="local-repo-heading">
+                  <div><strong>{repo.displayName}</strong><span>{repo.path}</span></div>
+                  <button className="icon-button" title="Remove repository" type="button" onClick={() => onRemoveLocalRepository(repo.id)}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+                <div className="field-grid">
+                  <SettingsField label="Detected Git identity">
+                    <input readOnly value={[repo.detectedName, repo.detectedEmail].filter(Boolean).join(" / ")} />
+                  </SettingsField>
+                  <SettingsField label="Additional author emails" hint="Comma-separated older or alternate account emails.">
+                    <input
+                      value={(repo.acceptedEmails || []).join(", ")}
+                      placeholder="name@company.com"
+                      onChange={(event) => onUpdateLocalRepository(repo.id, {
+                        acceptedEmails: event.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                      })}
+                    />
+                  </SettingsField>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
       <SettingsField label="GitHub commit author" hint="Filters shared repositories to your own commits and pull requests.">
         <SelectWrap>
           <select value={githubAuthor} onChange={(event) => onAuthorChange(event.target.value)}>
@@ -155,6 +210,8 @@ function GithubSection({
           </label>
         ))}
       </div>
+        </>
+      )}
     </SettingsPanel>
   );
 }

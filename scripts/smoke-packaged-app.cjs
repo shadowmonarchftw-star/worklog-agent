@@ -1,4 +1,7 @@
 const { spawn, spawnSync } = require("node:child_process");
+const { mkdtempSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const path = require("node:path");
 
 const executablePath = process.argv[2];
 if (!executablePath) {
@@ -7,10 +10,15 @@ if (!executablePath) {
 
 const port = 31000 + (process.pid % 1000);
 const baseUrl = `http://127.0.0.1:${port}`;
-const child = spawn(executablePath, ["--enable-logging=stderr"], {
+const userDataDir = mkdtempSync(path.join(tmpdir(), "worklog-agent-smoke-"));
+const child = spawn(executablePath, [
+  "--enable-logging=stderr",
+  `--user-data-dir=${userDataDir}`,
+], {
   env: {
     ...process.env,
     WORKLOG_AGENT_PORT: String(port),
+    WORKLOG_AGENT_SMOKE_USER_DATA: userDataDir,
   },
   stdio: "inherit",
 });
