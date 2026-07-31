@@ -71,8 +71,10 @@ function notificationFor(result) {
   }
   if (result?.status === "no_activity") {
     return {
-      title: "No GitHub activity",
-      body: "No worklog was written today.",
+      title: "No activity",
+      body: warning
+        ? `No worklog was written today. ${warning}`
+        : "No worklog was written today.",
     };
   }
   return null;

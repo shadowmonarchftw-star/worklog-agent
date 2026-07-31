@@ -390,7 +390,14 @@ test("maps run outcomes to concise notifications", async () => {
     ],
     [
       { status: "no_activity" },
-      { title: "No GitHub activity", body: "No worklog was written today." },
+      { title: "No activity", body: "No worklog was written today." },
+    ],
+    [
+      { status: "no_activity", warnings: ["Could not read local repository \"app\"."] },
+      {
+        title: "No activity",
+        body: "No worklog was written today. Could not read local repository \"app\".",
+      },
     ],
   ];
 
