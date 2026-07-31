@@ -59,8 +59,7 @@ function persistence(db, settings) {
         id: randomUUID(),
         createdAt: new Date().toISOString(),
       };
-      saveHistoryEntry(db, saved);
-      return saved;
+      return saveHistoryEntry(db, saved);
     },
     checkpointHistory: (input) => checkpointAutomationHistory(db, input),
     checkpointIntent: (input) => checkpointAutomationIntent(db, input),
@@ -81,8 +80,7 @@ function persistence(db, settings) {
         summary: intendedRow.summary,
         createdAt: new Date().toISOString(),
       };
-      saveHistoryEntry(db, entry);
-      return entry;
+      return saveHistoryEntry(db, entry);
     },
   };
 }

@@ -59,9 +59,65 @@ test("history entries persist newest first and replace same work date", () => {
   const history = listHistory(db);
 
   assert.equal(history.length, 1);
-  assert.equal(history[0].id, "second");
+  assert.equal(history[0].id, "first");
   assert.equal(history[0].summary, "New summary");
   assert.deepEqual(history[0].repos, ["owner/app"]);
+});
+
+test("replacing history for a completed work date preserves referenced history ID", () => {
+  const db = tempDb();
+
+  saveHistoryEntry(db, {
+    id: "first",
+    developerName: "Asha",
+    workDate: "2026-07-23",
+    style: "standup",
+    repos: ["owner/app"],
+    activity: "old",
+    summary: "Old summary",
+    createdAt: "2026-07-23T10:00:00.000Z",
+  });
+  db.prepare(
+    `INSERT INTO automation_days
+      (id, work_date, timezone, since, until, terminal_outcome,
+       success_attempt_id, created_at, updated_at, completed_at)
+     VALUES (
+       'day-1', '2026-07-23', 'UTC',
+       '2026-07-23T00:00:00.000Z', '2026-07-24T00:00:00.000Z',
+       NULL, NULL, '2026-07-23T10:00:00.000Z',
+       '2026-07-23T10:00:00.000Z', NULL
+     )`,
+  ).run();
+  db.prepare(
+    `INSERT INTO automation_attempts
+      (id, day_id, work_date, trigger, status, owner_id, history_id,
+       created_at, updated_at, completed_at)
+     VALUES (
+       'attempt-1', 'day-1', '2026-07-23', 'manual', 'success',
+       'runner', 'first', '2026-07-23T10:00:00.000Z',
+       '2026-07-23T10:01:00.000Z', '2026-07-23T10:01:00.000Z'
+     )`,
+  ).run();
+
+  const saved = saveHistoryEntry(db, {
+    id: "second",
+    developerName: "Asha",
+    workDate: "2026-07-23",
+    style: "standup",
+    repos: ["owner/app"],
+    activity: "new",
+    summary: "New summary",
+    createdAt: "2026-07-23T11:00:00.000Z",
+  });
+
+  assert.equal(saved.id, "first");
+  assert.equal(saved.summary, "New summary");
+  assert.equal(
+    db.prepare("SELECT history_id FROM automation_attempts WHERE id = ?").get(
+      "attempt-1",
+    ).history_id,
+    "first",
+  );
 });
 
 test("automation schema includes durable days, linked attempts, lease, and indexes", () => {
