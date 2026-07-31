@@ -1,19 +1,33 @@
 const {
   app,
   BrowserWindow,
+  ipcMain,
+  Menu,
+  nativeImage,
   Notification,
   powerMonitor,
   shell,
+  Tray,
   utilityProcess,
 } = require("electron");
+const path = require("node:path");
 const { getServerConfig, startAppServer, waitForAppUrl } = require("./app-server.cjs");
 const { registerExternalLinkHandler } = require("./external-links.cjs");
 const { createScheduler } = require("./scheduler.cjs");
 const { createShutdownHandler } = require("./shutdown.cjs");
+const {
+  loginItemFor,
+  shouldKeepAlive,
+  shouldStartHidden,
+} = require("./lifecycle.cjs");
 
 let appServer;
 let appUrl;
 let scheduler;
+let mainWindow;
+let tray;
+let automationSettings = {};
+let isQuitting = false;
 
 async function automationRequest(path, options = {}) {
   const response = await fetch(`${appUrl}/api/automation/${path}`, {
@@ -51,6 +65,11 @@ function createAutomationScheduler() {
 }
 
 async function createWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    return mainWindow;
+  }
   const window = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -60,13 +79,71 @@ async function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, "preload.cjs"),
     },
+  });
+  mainWindow = window;
+  window.on("close", (event) => {
+    if (!isQuitting && shouldKeepAlive(automationSettings)) {
+      event.preventDefault();
+      window.hide();
+    }
+  });
+  window.on("closed", () => {
+    if (mainWindow === window) mainWindow = null;
   });
 
   registerExternalLinkHandler(window, (url) => shell.openExternal(url));
 
   await window.loadURL(appUrl);
+  return window;
 }
+
+function trayIcon() {
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, "tray-icon.png")
+    : path.join(__dirname, "..", "build", "icon.png");
+  return nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
+}
+
+function ensureTray() {
+  if (tray || !shouldKeepAlive(automationSettings)) return;
+  tray = new Tray(trayIcon());
+  tray.setToolTip("AI Worklog Agent");
+  tray.on("double-click", () => void createWindow());
+  updateTrayMenu();
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: automationSettings.enabled ? "Automation enabled" : "Automation paused", enabled: false },
+    { type: "separator" },
+    { label: "Open AI Worklog Agent", click: () => void createWindow() },
+    { label: "Run worklog now", click: () => void scheduler?.runNow() },
+    { type: "separator" },
+    { label: "Quit", click: () => { isQuitting = true; app.quit(); } },
+  ]));
+}
+
+async function reconcileAutomationSettings(nextSettings) {
+  automationSettings = nextSettings || {};
+  app.setLoginItemSettings(loginItemFor(automationSettings));
+  if (shouldKeepAlive(automationSettings)) ensureTray();
+  else if (tray) {
+    tray.destroy();
+    tray = null;
+  }
+  updateTrayMenu();
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+app.on("second-instance", () => {
+  void createWindow();
+});
 
 app.whenReady().then(async () => {
   const serverConfig = getServerConfig({
@@ -84,11 +161,18 @@ app.whenReady().then(async () => {
   if (appServer.automationAvailable) {
     scheduler = createAutomationScheduler();
     await scheduler.start();
+    const data = await automationRequest("settings");
+    await reconcileAutomationSettings(data.settings);
     powerMonitor.on("resume", () => {
       void scheduler.resume();
     });
   }
-  await createWindow();
+  const loginLaunch = app.getLoginItemSettings().wasOpenedAtLogin;
+  if (!shouldStartHidden({ loginLaunch, settings: automationSettings })) {
+    await createWindow();
+  } else {
+    ensureTray();
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -96,9 +180,25 @@ app.whenReady().then(async () => {
     }
   });
 });
+}
+
+ipcMain.handle("automation:status", async () => automationRequest("settings"));
+ipcMain.handle("automation:run", async () => scheduler?.runNow() || {
+  status: "unavailable",
+  error: "Automation is unavailable in this mode.",
+});
+ipcMain.handle("automation:save-settings", async (_event, patch) => {
+  const data = await automationRequest("settings", {
+    method: "POST",
+    body: JSON.stringify(patch),
+    headers: { Origin: appUrl },
+  });
+  await reconcileAutomationSettings(data.settings);
+  return data;
+});
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" && !shouldKeepAlive(automationSettings)) {
     app.quit();
   }
 });
@@ -106,9 +206,14 @@ app.on("window-all-closed", () => {
 const shutdown = createShutdownHandler({
   getScheduler: () => scheduler,
   getAppServer: () => appServer,
-  exit: (code) => app.exit(code),
+  exit: (code) => {
+    tray?.destroy();
+    tray = null;
+    app.exit(code);
+  },
 });
 
 app.on("before-quit", (event) => {
+  isQuitting = true;
   void shutdown(event);
 });

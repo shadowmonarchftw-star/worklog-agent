@@ -28,6 +28,10 @@ test("packages only Electron code and copies the standalone server as a resource
       to: "server/.next/static",
       filter: ["**/*"],
     },
+    {
+      from: "build/icon.png",
+      to: "tray-icon.png",
+    },
   ]);
   assert.equal(packageJson.build.compression, "maximum");
   assert.equal(packageJson.build.mac.icon, "build/icon.png");

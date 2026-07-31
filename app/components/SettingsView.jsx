@@ -3,6 +3,7 @@
 import {
   CheckCircle2,
   ChevronDown,
+  Clock3,
   GitFork,
   KeyRound,
   MonitorCog,
@@ -12,11 +13,13 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "./DashboardView";
+import { AutomationSection } from "./AutomationSection";
 
 const sections = [
   { id: "credentials", label: "Credentials", icon: KeyRound },
   { id: "github", label: "GitHub", icon: GitFork },
   { id: "google", label: "Google Sheets", icon: Table2 },
+  { id: "automation", label: "Automation", icon: Clock3 },
   { id: "output", label: "Output", icon: Sparkles },
   { id: "appearance", label: "Appearance", icon: MonitorCog },
 ];
@@ -51,6 +54,7 @@ export function SettingsView(props) {
             {section === "credentials" && <CredentialsSection {...props} />}
             {section === "github" && <GithubSection {...props} />}
             {section === "google" && <GoogleSection {...props} />}
+            {section === "automation" && <AutomationSection {...props} />}
             {section === "output" && <OutputSection {...props} />}
             {section === "appearance" && <AppearanceSection {...props} />}
           </div>

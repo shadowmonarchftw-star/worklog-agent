@@ -63,6 +63,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "build/icon.png",
+        "to": "tray-icon.png"
       }
     ],
     "win": {

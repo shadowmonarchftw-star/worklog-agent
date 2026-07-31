@@ -41,6 +41,15 @@ export default function Home() {
   const [history, setHistory] = useState([]);
   const [view, setView] = useState("dashboard");
   const [showActivity, setShowActivity] = useState(false);
+  const [automation, setAutomation] = useState({
+    enabled: false,
+    time: "17:30",
+    days: [1, 2, 3, 4, 5],
+    startAtLogin: false,
+  });
+  const [automationStatus, setAutomationStatus] = useState({});
+  const [automationBusy, setAutomationBusy] = useState(false);
+  const [automationMessage, setAutomationMessage] = useState("");
   const requestIdRef = useRef(0);
   const initializedRef = useRef(false);
   const suppressResetRef = useRef(false);
@@ -48,6 +57,18 @@ export default function Home() {
   const setupComplete = Boolean(
     githubToken && geminiApiKey && githubAuthor && selectedRepos.length,
   );
+  const desktopAvailable = typeof window !== "undefined" &&
+    Boolean(window.worklogDesktop?.runAutomation);
+  const automationReady = Boolean(
+    desktopAvailable && setupComplete && googleConnected && googleSheetLink,
+  );
+  const automationUnavailableMessage = !desktopAvailable
+    ? "Desktop app required to test automation."
+    : !setupComplete
+      ? "Complete GitHub and Gemini setup before enabling automation."
+      : !googleConnected || !googleSheetLink
+        ? "Connect Google Sheets before enabling automation."
+        : "";
   const currentInputKey = activityInputKey({
     workDate,
     githubAuthor,
@@ -57,9 +78,10 @@ export default function Home() {
 
   useEffect(() => {
     async function loadLocalData() {
-      const [settingsResponse, historyResponse] = await Promise.all([
+      const [settingsResponse, historyResponse, automationResponse] = await Promise.all([
         fetch("/api/local/settings"),
         fetch("/api/local/history"),
+        fetch("/api/automation/settings"),
       ]);
 
       if (settingsResponse.ok) {
@@ -83,6 +105,12 @@ export default function Home() {
       if (historyResponse.ok) {
         const { history: savedHistory } = await historyResponse.json();
         setHistory(savedHistory);
+      }
+
+      if (automationResponse.ok) {
+        const data = await automationResponse.json();
+        setAutomation((current) => ({ ...current, ...data.settings }));
+        setAutomationStatus(data.status || {});
       }
 
       await loadGoogleStatus();
@@ -143,6 +171,62 @@ export default function Home() {
         },
       }),
     });
+  }
+
+  async function saveAutomation(patch) {
+    setAutomationBusy(true);
+    setAutomationMessage("");
+    try {
+      let data;
+      if (window.worklogDesktop?.saveAutomationSettings) {
+        data = await window.worklogDesktop.saveAutomationSettings(patch);
+      } else {
+        const response = await fetch("/api/automation/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not save automation.");
+      }
+      setAutomation((current) => ({ ...current, ...data.settings }));
+      setAutomationStatus(data.status || {});
+      setAutomationMessage("Automation settings saved.");
+    } catch (nextError) {
+      setAutomationMessage(nextError.message || "Could not save automation.");
+    } finally {
+      setAutomationBusy(false);
+    }
+  }
+
+  async function runAutomationNow() {
+    if (!window.worklogDesktop?.runAutomation) {
+      setAutomationMessage("Desktop app required to test automation.");
+      return;
+    }
+    setAutomationBusy(true);
+    setAutomationMessage("Generating today's worklog...");
+    try {
+      const result = await window.worklogDesktop.runAutomation();
+      setAutomationMessage(
+        result?.status === "success"
+          ? "Worklog written to Google Sheets."
+          : result?.status === "no_activity"
+            ? "No GitHub activity found today."
+            : result?.error || "Automation finished.",
+      );
+      const data = await window.worklogDesktop.getAutomationStatus();
+      setAutomationStatus(data.status || {});
+      const historyResponse = await fetch("/api/local/history");
+      if (historyResponse.ok) {
+        const { history: savedHistory } = await historyResponse.json();
+        setHistory(savedHistory);
+      }
+    } catch (nextError) {
+      setAutomationMessage(nextError.message || "Automatic worklog failed.");
+    } finally {
+      setAutomationBusy(false);
+    }
   }
 
   async function loadRepos() {
@@ -382,6 +466,12 @@ export default function Home() {
   }
 
   const sharedSettings = {
+    available: automationReady,
+    automation,
+    automationBusy,
+    automationMessage,
+    automationStatus,
+    automationUnavailableMessage,
     defaultHours,
     geminiApiKey,
     githubAuthor,
@@ -394,6 +484,7 @@ export default function Home() {
     googleSheetLink,
     googleSheetTab,
     onAuthorChange: (value) => { setGithubAuthor(value); void saveSettings({ githubAuthor: value }); },
+    onChange: saveAutomation,
     onConnectGoogle: connectGoogle,
     onDefaultHoursChange: setDefaultHours,
     onGeminiApiKeyChange: setGeminiApiKey,
@@ -403,6 +494,7 @@ export default function Home() {
     onGoogleSheetLinkChange: setGoogleSheetLink,
     onGoogleSheetTabChange: setGoogleSheetTab,
     onLoadRepos: loadRepos,
+    onRunNow: runAutomationNow,
     onSave: saveSettings,
     onStyleChange: setStyle,
     onThemeChange: changeTheme,

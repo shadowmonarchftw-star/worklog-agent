@@ -4,6 +4,97 @@
   color-scheme: dark;
 }
 
+.automation-toggle {
+  align-items: center;
+  border: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 12px 14px;
+}
+
+.automation-toggle > span {
+  display: grid;
+  gap: 4px;
+}
+
+.automation-toggle strong {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+}
+
+.automation-toggle small,
+.automation-status dt {
+  color: var(--muted);
+}
+
+.automation-toggle input {
+  height: 18px;
+  width: 36px;
+}
+
+.automation-time {
+  align-items: center;
+  border: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.automation-time input {
+  border: 0;
+  padding-left: 0;
+}
+
+.weekday-picker {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(7, minmax(32px, 1fr));
+}
+
+.weekday-picker button {
+  aspect-ratio: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  min-width: 32px;
+}
+
+.weekday-picker button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #10110f;
+}
+
+.automation-run {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  width: 100%;
+}
+
+.automation-status {
+  border-top: 1px solid var(--border);
+  display: grid;
+  margin: 4px 0 0;
+}
+
+.automation-status div {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(150px, 0.5fr) 1fr;
+  padding: 10px 0;
+}
+
+.automation-status dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 * {
   box-sizing: border-box;
 }
