@@ -12,13 +12,10 @@ local settings.
 ### Download the installer
 
 1. Open the repository on GitHub.
-2. Select **Actions**.
-3. Select **Build Windows Installer** in the left sidebar.
-4. Open the newest workflow run with a green check mark. Older red runs are
-   failed builds and can be ignored.
-5. Scroll to **Artifacts** and download `AI-Worklog-Agent-Windows`.
-6. Extract the downloaded ZIP.
-7. Run `AI Worklog Agent-Setup-0.2.0.exe`.
+2. Select **Releases**.
+3. Open the newest release.
+4. Download the Windows `.exe` under **Assets**.
+5. Run the downloaded setup file.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
@@ -68,14 +65,11 @@ npm run desktop
 ### Download the installer
 
 1. Open the repository on GitHub.
-2. Select **Actions**.
-3. Select **Build macOS Installers** in the left sidebar.
-4. Open the newest workflow run with a green check mark.
-5. Scroll to **Artifacts** and download the correct file:
-   - `AI-Worklog-Agent-macOS-arm64` for Apple Silicon Macs.
-   - `AI-Worklog-Agent-macOS-x64` for Intel Macs.
-6. Extract the downloaded ZIP and open the `.dmg`.
-7. Drag **AI Worklog Agent** into **Applications**.
+2. Select **Releases**.
+3. Open the newest release.
+4. Under **Assets**, download the `arm64` `.dmg` for Apple Silicon or the `x64`
+   `.dmg` for Intel.
+5. Open the `.dmg` and drag **AI Worklog Agent** into **Applications**.
 
 To identify the Mac type, open **Apple menu > About This Mac**. A Mac showing
 **Chip: Apple M1/M2/M3/M4** uses `arm64`. A Mac showing **Processor: Intel**
@@ -330,7 +324,9 @@ Repository maintainers can create a new installer without a Windows computer:
 6. Open the completed run and download `AI-Worklog-Agent-Windows` under
    **Artifacts**.
 
-Pushing a version tag such as `v0.2.0` also starts the installer workflow.
+These manual runs are for testing. Pushing a version tag such as `v0.3.2`
+starts the combined release workflow and permanently publishes every installer
+on the repository's **Releases** page.
 
 ## Creating macOS Installers on GitHub
 
@@ -342,4 +338,5 @@ Pushing a version tag such as `v0.2.0` also starts the installer workflow.
 6. Download both macOS artifacts and share the one matching the colleague's
    Mac.
 
-Pushing a version tag also starts both Windows and macOS installer workflows.
+Pushing a version tag publishes both macOS installers and the Windows installer
+on one GitHub Release after every platform build succeeds.
