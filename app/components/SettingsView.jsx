@@ -158,7 +158,7 @@ function GithubSection({
                     <Trash2 size={15} />
                   </button>
                 </div>
-                <div className="field-grid">
+                <div className="field-grid local-identity-grid">
                   <SettingsField label="Detected Git identity">
                     <input readOnly value={[repo.detectedName, repo.detectedEmail].filter(Boolean).join(" / ")} />
                   </SettingsField>
@@ -181,7 +181,7 @@ function GithubSection({
         </>
       ) : (
         <>
-      <SettingsField label="GitHub commit author" hint="Filters shared repositories to your own commits and pull requests.">
+      <SettingsField label="GitHub commit author" hint="Filters shared repositories to your own commits and pull requests. GitHub activity reads the repository's default branch.">
         <SelectWrap>
           <select value={githubAuthor} onChange={(event) => onAuthorChange(event.target.value)}>
             <option value="">Select author</option>

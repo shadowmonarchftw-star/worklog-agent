@@ -303,6 +303,44 @@ test("recovery accepts exact intended row and restores missing history", async (
   ]);
 });
 
+test("recovery ignores user-owned reference and comment columns", async () => {
+  const completions = [];
+  const attempt = {
+    id: "attempt-1",
+    intendedRow: intended,
+    intendedRowHash: rowHash(intended),
+    preWriteRowHash: "row_absent",
+  };
+
+  await recoverInterruptedRuns({
+    ownerId: "recovery",
+    lease: {
+      interruptStale: async () => {},
+      listInterrupted: async () => [attempt],
+      claimRecovery: async () => ({ outcome: "claimed", attempt }),
+      renew: async () => true,
+      release: async () => {},
+    },
+    store: {
+      complete: async (value) => completions.push(value),
+      cleanup: async () => {},
+    },
+    providers: {
+      sheets: {
+        readRow: async () => ({
+          ...intended,
+          reference: "Office ticket 123",
+          comments: "Reviewed by manager",
+        }),
+      },
+    },
+    settings,
+    tokens,
+  });
+
+  assert.equal(completions[0].status, "success");
+});
+
 test("recovery revalidates lease after history lookup before restoring history", async () => {
   let owned = true;
   let restores = 0;

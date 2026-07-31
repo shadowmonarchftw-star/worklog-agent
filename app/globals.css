@@ -1133,6 +1133,10 @@ input[type="date"] {
   gap: 14px;
 }
 
+.local-identity-grid {
+  align-items: start;
+}
+
 .field-grid.compact {
   grid-template-columns: minmax(0, 1fr) minmax(120px, 0.35fr);
 }

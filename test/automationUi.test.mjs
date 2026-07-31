@@ -30,6 +30,7 @@ test("Settings exposes GitHub and local repository activity sources", async () =
   ]);
   assert.match(settings, /Local repositories/);
   assert.match(settings, /Additional author emails/);
+  assert.match(settings, /local-identity-grid/);
   assert.match(preload, /chooseLocalRepository/);
   assert.match(preload, /inspectLocalRepository/);
 });

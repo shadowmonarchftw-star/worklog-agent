@@ -8,6 +8,7 @@ import {
   formatSheetDate,
   formatSheetRange,
 } from "../lib/googleSheets.mjs";
+import { buildSheetWriteData } from "../lib/googleSheetsProvider.mjs";
 
 test("extractSpreadsheetId reads id from normal Google Sheets URL", () => {
   assert.equal(
@@ -46,4 +47,41 @@ test("findDateRow returns one-based row number", () => {
 
 test("formatSheetRange quotes sheet tabs safely", () => {
   assert.equal(formatSheetRange("July Worklog", "A:E"), "'July Worklog'!A:E");
+});
+
+test("Google Sheets writes only date, summary, and hours without touching reference or comments", () => {
+  assert.deepEqual(
+    buildSheetWriteData({
+      tab: "July Worklog",
+      rowNumber: 7,
+      includeDate: false,
+      row: {
+        date: "7/30/2026",
+        summary: "Fixed rate imports.",
+        reference: "must stay untouched",
+        hours: "8",
+        comments: "must stay untouched",
+      },
+    }),
+    [
+      { range: "'July Worklog'!B7", values: [["Fixed rate imports."]] },
+      { range: "'July Worklog'!D7", values: [["8"]] },
+    ],
+  );
+});
+
+test("Google Sheets adds the date separately when creating a new worklog row", () => {
+  assert.deepEqual(
+    buildSheetWriteData({
+      tab: "Sheet1",
+      rowNumber: 3,
+      includeDate: true,
+      row: { date: "7/30/2026", summary: "Fixed imports.", hours: "4" },
+    }),
+    [
+      { range: "'Sheet1'!A3", values: [["7/30/2026"]] },
+      { range: "'Sheet1'!B3", values: [["Fixed imports."]] },
+      { range: "'Sheet1'!D3", values: [["4"]] },
+    ],
+  );
 });

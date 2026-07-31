@@ -21,3 +21,13 @@ test("UI removes Developer field and exposes redesigned views", async () => {
   assert.match(source, /Monitored repos/i);
   assert.match(source, /Selected date activity/i);
 });
+
+test("Settings explains branch coverage for both activity sources", async () => {
+  const settings = await readFile(
+    new URL("../app/components/SettingsView.jsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(settings, /all local branches/i);
+  assert.match(settings, /default branch/i);
+});

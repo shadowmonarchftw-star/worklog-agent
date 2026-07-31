@@ -176,16 +176,23 @@ access was revoked or the OAuth configuration changed.
 4. Review the generated summary.
 
 If Google Sheets is connected, the app finds the matching date in column A and
-updates that row. If the date does not exist, it appends a new row. The office
-sheet mapping is:
+updates that row. If the date does not exist, it adds the date on a new row.
+The app only writes the date, generated summary, and hours. It leaves task
+references and comments untouched.
+
+The required sheet mapping is:
 
 | Column | Value |
 | --- | --- |
 | A | Date |
 | B | Generated task summary |
-| C | Task reference |
+| C | Not written by the app |
 | D | Hours |
-| E | Comments |
+| E | Not written by the app |
+
+The date in column A must use `M/D/YYYY`, for example `7/31/2026`. The sheet
+can have additional headers, formatting, and formulas. The configured sheet tab
+name must exactly match the tab shown at the bottom of Google Sheets.
 
 ## Automatic Daily Worklogs
 
@@ -224,6 +231,10 @@ Local mode reads completed commits from every local branch, including commits
 that have not been pushed. It ignores staged, unstaged, and untracked changes.
 Each repository uses its own Git identity, so company and personal accounts can
 be included safely in the same worklog.
+
+GitHub mode reads commits returned for each repository's default branch. Use
+local mode when the worklog must include commits from several branches before
+they are merged into the default branch.
 
 ## Local Data
 
