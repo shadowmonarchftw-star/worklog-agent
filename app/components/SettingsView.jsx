@@ -121,6 +121,7 @@ function GithubSection({
   githubLoading,
   githubToken,
   localRepositories,
+  localRepoMessage,
   onActivitySourceChange,
   onAddLocalRepository,
   onAuthorChange,
@@ -174,6 +175,9 @@ function GithubSection({
               </article>
             ))}
           </div>
+          {localRepoMessage && (
+            <p className="settings-status" role="status">{localRepoMessage}</p>
+          )}
         </>
       ) : (
         <>

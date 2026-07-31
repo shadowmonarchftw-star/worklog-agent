@@ -213,8 +213,12 @@ ipcMain.handle("local-git:inspect-repository", async (_event, repositoryPath) =>
   if (typeof repositoryPath !== "string" || !repositoryPath.trim()) {
     throw new Error("Choose a repository folder.");
   }
-  const { inspectLocalRepository } = await import("../lib/localGitProvider.mjs");
-  return inspectLocalRepository(repositoryPath);
+  const data = await automationRequest("inspect-repository", {
+    method: "POST",
+    body: JSON.stringify({ path: repositoryPath }),
+    headers: { Origin: appUrl },
+  });
+  return data.repository;
 });
 
 app.on("window-all-closed", () => {

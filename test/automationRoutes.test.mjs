@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createIdentityHandler } from "../app/api/automation/identity/route.js";
+import {
+  createInspectRepositoryHandler,
+} from "../app/api/automation/inspect-repository/route.js";
 import { createRecoverHandler } from "../app/api/automation/recover/route.js";
 import { createRunHandler } from "../app/api/automation/run/route.js";
 import {
@@ -387,4 +390,43 @@ test("identity route proves the nonce only to a valid capability", async () => {
 
   assert.deepEqual(body, { identity: launchIdentity("nonce-1") });
   assert.doesNotMatch(JSON.stringify(body), /route-capability|nonce-1/);
+});
+
+test("repository inspection route is authenticated and validates its path", async () => {
+  const calls = [];
+  const POST = createInspectRepositoryHandler({
+    capability,
+    inspect: async (repositoryPath) => {
+      calls.push(repositoryPath);
+      return { path: repositoryPath, displayName: "Shopify-GF" };
+    },
+  });
+
+  assert.equal(
+    (await POST(apiRequest("/api/automation/inspect-repository", {
+      body: { path: "/Users/success/Shopify-GF" },
+    }))).status,
+    401,
+  );
+  assert.equal(
+    (await POST(apiRequest("/api/automation/inspect-repository", {
+      token: capability,
+      origin: baseUrl,
+      body: { path: "" },
+    }))).status,
+    400,
+  );
+  const response = await POST(apiRequest("/api/automation/inspect-repository", {
+    token: capability,
+    origin: baseUrl,
+    body: { path: "/Users/success/Shopify-GF" },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    repository: {
+      path: "/Users/success/Shopify-GF",
+      displayName: "Shopify-GF",
+    },
+  });
+  assert.deepEqual(calls, ["/Users/success/Shopify-GF"]);
 });

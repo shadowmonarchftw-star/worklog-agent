@@ -30,6 +30,7 @@ export default function Home() {
   const [selectedRepos, setSelectedRepos] = useState([]);
   const [activitySource, setActivitySource] = useState("github");
   const [localRepositories, setLocalRepositories] = useState([]);
+  const [localRepoMessage, setLocalRepoMessage] = useState("");
   const [workDate, setWorkDate] = useState(() => localDateAt());
   const [style, setStyle] = useState("standup");
   const [theme, setTheme] = useState("dark");
@@ -288,13 +289,19 @@ export default function Home() {
   }
 
   async function addLocalRepository() {
+    setLocalRepoMessage("");
     if (!window.worklogDesktop?.chooseLocalRepository) {
-      setError("Local repositories can only be added in the desktop app.");
+      setLocalRepoMessage("Local repositories can only be added in the desktop app.");
       return;
     }
     try {
+      setLocalRepoMessage("Choose a repository folder...");
       const selectedPath = await window.worklogDesktop.chooseLocalRepository();
-      if (!selectedPath) return;
+      if (!selectedPath) {
+        setLocalRepoMessage("");
+        return;
+      }
+      setLocalRepoMessage("Checking repository...");
       const repository = await window.worklogDesktop.inspectLocalRepository(selectedPath);
       const next = [
         ...localRepositories.filter((item) => item.path !== repository.path),
@@ -302,8 +309,9 @@ export default function Home() {
       ];
       setLocalRepositories(next);
       await saveSettings({ localRepositories: next });
+      setLocalRepoMessage(`${repository.displayName} added.`);
     } catch (nextError) {
-      setError(nextError.message || "Could not add local repository.");
+      setLocalRepoMessage(nextError.message || "Could not add local repository.");
     }
   }
 
@@ -549,6 +557,7 @@ export default function Home() {
     githubToken,
     activitySource,
     localRepositories,
+    localRepoMessage,
     googleClientId,
     googleClientSecret,
     googleConnected,
