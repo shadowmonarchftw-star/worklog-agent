@@ -30,8 +30,25 @@
 }
 
 .automation-toggle input {
-  height: 18px;
-  width: 36px;
+  appearance: none;
+  background: var(--muted);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  box-shadow: inset -16px 0 0 1px var(--panel);
+  height: 24px;
+  transition: background 120ms ease, box-shadow 120ms ease;
+  width: 42px;
+}
+
+.automation-toggle input:checked {
+  background: var(--accent);
+  box-shadow: inset 16px 0 0 1px var(--panel);
+}
+
+.automation-schedule {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(160px, 0.55fr) minmax(300px, 1.45fr);
 }
 
 .automation-time {
@@ -93,6 +110,12 @@
 .automation-status dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .automation-schedule {
+    grid-template-columns: 1fr;
+  }
 }
 
 * {

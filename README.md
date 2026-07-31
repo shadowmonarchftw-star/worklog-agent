@@ -18,7 +18,7 @@ local settings.
    failed builds and can be ignored.
 5. Scroll to **Artifacts** and download `AI-Worklog-Agent-Windows`.
 6. Extract the downloaded ZIP.
-7. Run `AI Worklog Agent-Setup-0.1.9.exe`.
+7. Run `AI Worklog Agent-Setup-0.2.0.exe`.
 
 The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
@@ -193,6 +193,27 @@ sheet mapping is:
 | D | Hours |
 | E | Comments |
 
+## Automatic Daily Worklogs
+
+After GitHub, Gemini, and Google Sheets are connected:
+
+1. Open **Settings > Automation**.
+2. Choose the run time and weekdays. The default is Monday-Friday at 17:30.
+3. Enable **Automatic worklogs**.
+4. Leave **Start at login** enabled so the agent stays available in the system
+   tray.
+5. Click **Run now** once to verify the complete setup.
+
+At the scheduled local time, the app reads that day's GitHub activity,
+generates the summary, updates the matching Google Sheet date row, stores local
+history, and shows a desktop notification. Closing the window keeps the agent
+in the tray while automation is enabled.
+
+The computer must be powered on and the user must be signed in. If it was
+asleep at the scheduled time, the agent performs one same-day catch-up after
+waking. A successful day or a day with no GitHub activity is not repeated
+automatically.
+
 ## Local Data
 
 Settings, credentials, Google tokens, and summary history are stored locally:
@@ -292,7 +313,7 @@ Repository maintainers can create a new installer without a Windows computer:
 6. Open the completed run and download `AI-Worklog-Agent-Windows` under
    **Artifacts**.
 
-Pushing a version tag such as `v0.1.9` also starts the installer workflow.
+Pushing a version tag such as `v0.2.0` also starts the installer workflow.
 
 ## Creating macOS Installers on GitHub
 

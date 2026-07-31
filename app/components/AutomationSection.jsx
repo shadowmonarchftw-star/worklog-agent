@@ -55,7 +55,7 @@ export function AutomationSection({
           />
         </label>
 
-        <div className="field-grid compact">
+        <div className="automation-schedule">
           <label className="settings-field">
             <span>Run time</span>
             <span className="automation-time">
