@@ -38,6 +38,7 @@ export default function Home() {
   const [pullRequestCount, setPullRequestCount] = useState(0);
   const [summary, setSummary] = useState("");
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
   const [loading, setLoading] = useState("");
   const [githubLoading, setGithubLoading] = useState(false);
   const [history, setHistory] = useState([]);
@@ -145,6 +146,7 @@ export default function Home() {
     setPullRequestCount(0);
     setSummary("");
     setError("");
+    setWarning("");
     setSheetStatus("");
     setShowActivity(false);
   }, [currentInputKey]);
@@ -241,6 +243,7 @@ export default function Home() {
   async function loadRepos() {
     setGithubLoading(true);
     setError("");
+    setWarning("");
     const response = await fetch("/api/github/repos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -360,6 +363,7 @@ export default function Home() {
     setActivity(data.activity);
     setCommitCount(data.commitCount || 0);
     setPullRequestCount(data.pullRequestCount || 0);
+    setWarning((data.warnings || []).join(" "));
     if (reveal) setShowActivity(true);
     return data;
   }
@@ -389,6 +393,8 @@ export default function Home() {
         githubAuthor,
         githubToken,
         selectedRepos,
+        activitySource,
+        localRepositories,
       }),
     };
     if (!isCurrentActivityRequest(started, current)) return;
@@ -446,6 +452,7 @@ export default function Home() {
 
   async function connectGoogle() {
     setError("");
+    setWarning("");
     setSheetStatus("Opening Google...");
     await saveSettings({ googleClientId, googleClientSecret, googleSheetLink, googleSheetTab, defaultHours });
     const response = await fetch("/api/google/auth-url");
@@ -592,6 +599,7 @@ export default function Home() {
           activity={activity}
           commitCount={commitCount}
           error={error}
+          warning={warning}
           githubAuthor={githubAuthor}
           activitySource={activitySource}
           history={history}

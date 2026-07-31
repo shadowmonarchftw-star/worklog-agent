@@ -60,11 +60,13 @@ test("collects unpushed commits from all local branches and ignores dirty state"
     since: "2026-07-30T18:15:00.000Z",
     until: "2026-07-31T18:15:00.000Z",
     date: "2026-07-31",
+    timezone: "Asia/Kathmandu",
   });
 
   assert.equal(result.commitCount, 2);
   assert.match(result.activity, /main work/);
   assert.match(result.activity, /feature work/);
+  assert.match(result.activity, /09:00 commit/);
   assert.doesNotMatch(result.activity, /other work|unstaged|not committed/);
 });
 
@@ -88,6 +90,7 @@ test("combines repositories with different detected account identities", async (
     since: "2026-07-30T18:15:00.000Z",
     until: "2026-07-31T18:15:00.000Z",
     date: "2026-07-31",
+    timezone: "Asia/Kathmandu",
   });
 
   assert.equal(result.commitCount, 2);

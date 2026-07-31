@@ -26,6 +26,7 @@ export function DashboardView({
   activitySource,
   commitCount,
   error,
+  warning,
   githubAuthor,
   history,
   loading,
@@ -119,6 +120,7 @@ export function DashboardView({
           </section>
 
           {error && <div className="error-banner" role="alert">{error}</div>}
+          {warning && <div className="warning-banner" role="status">{warning}</div>}
 
           <div className="content-grid">
             <section className="panel summary-panel">

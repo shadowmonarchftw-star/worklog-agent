@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  preflightLocalGit,
   matchesIdentity,
   parseGitLog,
   sanitizeGitError,
@@ -37,4 +38,13 @@ test("sanitized git errors do not expose repository paths", () => {
   );
   assert.equal(message.includes("/Users/asha"), false);
   assert.match(message, /Client repo/);
+});
+
+test("preflight rejects repositories without any author identity", async () => {
+  await assert.rejects(
+    () => preflightLocalGit({
+      repositories: [{ path: "/unused", detectedName: "", detectedEmail: "" }],
+    }),
+    /Git identity or author override/,
+  );
 });

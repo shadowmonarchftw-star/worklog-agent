@@ -49,6 +49,21 @@ test("activity input changes when GitHub token changes", () => {
   );
 });
 
+test("activity input changes with local source and repository configuration", () => {
+  const base = {
+    workDate: "2026-07-31",
+    activitySource: "local",
+    localRepositories: [{ path: "/repo", acceptedEmails: ["a@test"] }],
+  };
+  assert.notEqual(
+    activityInputKey(base),
+    activityInputKey({
+      ...base,
+      localRepositories: [{ path: "/repo", acceptedEmails: ["b@test"] }],
+    }),
+  );
+});
+
 test("input reset clears activity workflow state", () => {
   assert.deepEqual(createEmptyActivityState(), {
     activity: "",

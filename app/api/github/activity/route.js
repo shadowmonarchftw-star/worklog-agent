@@ -16,12 +16,14 @@ export async function POST(request) {
       localRepositories,
     } = await request.json();
     if (activitySource === "local") {
+      const timezone = localTimezone();
       const range = suppliedSince && suppliedUntil
         ? { since: suppliedSince, until: suppliedUntil }
-        : localDayUtcRange(date, localTimezone());
+        : localDayUtcRange(date, timezone);
       return Response.json(await collectLocalGitActivity({
         repositories: localRepositories,
         date,
+        timezone,
         ...range,
       }));
     }

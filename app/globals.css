@@ -99,6 +99,13 @@
   overflow-wrap: anywhere;
 }
 
+.warning-banner {
+  border: 1px solid #d3a94f;
+  background: rgba(211, 169, 79, 0.12);
+  color: var(--text);
+  padding: 12px 14px;
+}
+
 .automation-schedule {
   display: grid;
   gap: 14px;
