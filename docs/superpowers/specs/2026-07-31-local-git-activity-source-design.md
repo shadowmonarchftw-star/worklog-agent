@@ -44,8 +44,10 @@ Identity is resolved independently for every selected repository:
    absent.
 3. Combine the detected identity with optional accepted-name and accepted-email
    overrides saved for that repository.
-4. Match commits case-insensitively by author email first and author name
-   second.
+4. If one or more accepted emails exist, match commits only by author email,
+   case-insensitively. A present but nonmatching email must never fall back to a
+   same-name match.
+5. Match by author name only when the repository has no accepted email at all.
 
 This supports users who use separate company, personal, and client GitHub
 accounts. Identity overrides also cover historical commits made with an older
@@ -62,16 +64,18 @@ For each selected repository:
 
 1. Validate the saved path and confirm it is a Git work tree.
 2. Resolve the repository display name and configured identity.
-3. Run `git log --all` for the selected local-day time range.
+3. Enumerate only `refs/heads/*`, then run `git log` for those explicit local
+   branch refs. Do not scan remote-tracking refs, tags, stash refs, or other
+   refs.
 4. Emit a machine-readable delimiter format containing full SHA, author name,
    author email, author date, and subject.
 5. Filter by the repository's accepted identities.
 6. Deduplicate by full SHA.
 7. Normalize commits into the same activity shape consumed by Gemini.
 
-`--all` includes commits reachable from every local ref, not only the currently
-checked-out branch. Merge commits are included because they are completed
-commits. Staged, unstaged, and untracked state is never queried.
+Explicit `refs/heads/*` includes commits reachable from every local branch, not
+only the currently checked-out branch. Merge commits are included because they
+are completed commits. Staged, unstaged, and untracked state is never queried.
 
 Local mode reports zero pull requests because pull requests are remote hosting
 objects. GitHub mode continues to include pull-request activity.
@@ -110,7 +114,7 @@ The workflow receives one activity provider selected from settings:
 - `githubProvider` for GitHub mode.
 - `localGitProvider` for local mode.
 
-Both return the existing normalized result:
+Both return the normalized result:
 
 ```text
 activity
@@ -118,7 +122,14 @@ commitCount
 pullRequestCount
 repoCount
 date
+warnings
 ```
+
+`warnings` is an array of sanitized user-facing warning strings and is empty
+for a fully healthy run. The worklog service returns it with successful and
+no-activity outcomes. The scheduler includes warnings in its desktop
+notification, and the manual UI displays them beside the result. Warnings are
+not included in Gemini input or the generated sheet cell.
 
 The rest of the pipeline remains unchanged: Gemini generation, local history,
 Google Sheets writing, retries, recovery, notifications, and scheduling.
@@ -133,20 +144,35 @@ Setup requirements become source-aware:
 - Both modes still require Gemini and Google Sheets settings for automatic
   writes.
 
+The selected provider exposes an asynchronous `preflight(settings)` contract.
+`executeWorklog` calls it after ordinary setup validation but before acquiring
+an automation lease or creating an attempt. Local preflight verifies that Git
+is executable and that at least one configured repository remains usable.
+GitHub preflight is a no-op because its request failures are recorded as
+provider failures after claiming.
+
 The dashboard describes the active source and monitored repository count.
 
 ## Time Handling
 
-The scheduler already calculates a local work date and UTC boundaries. The
-local provider passes those boundaries to Git and evaluates author timestamps,
-so manual and automatic runs use the same local-day definition as GitHub mode.
+The scheduler already calculates a local work date and UTC boundaries. Git's
+native `--since` and `--until` traversal filters use committer dates, so they
+must not be treated as the authoritative author-date filter. The local provider
+enumerates commits from the explicit local branch refs and applies the exact
+UTC boundaries to each parsed author timestamp in application code.
+
+To keep unusually large histories bounded, collection enforces a configurable
+process timeout and maximum output size. Exceeding either limit is a sanitized,
+actionable provider error rather than silently returning incomplete activity.
+The first implementation does not use Git date traversal filters because doing
+so could incorrectly omit a commit whose author and committer dates differ.
 
 Commit time shown in activity is converted to the user's local timezone.
 
 ## Failure Handling
 
-- If Git is unavailable, stop before claiming an automation attempt and show
-  installation guidance.
+- If Git is unavailable, local provider preflight stops before claiming an
+  automation attempt and shows installation guidance.
 - If every selected repository is unavailable or invalid, fail with an
   actionable setup error.
 - If some repositories are unavailable, collect healthy repositories and
@@ -154,8 +180,8 @@ Commit time shown in activity is converted to the user's local timezone.
 - A repository with no matching commits is healthy and contributes zero
   activity.
 - Git command errors are sanitized before being stored or shown.
-- Paths and command output are never sent to Gemini; only normalized repository
-  names and matching commit metadata are included.
+- Paths and raw Git command output are never sent to Gemini; only normalized
+  repository names and matching commit metadata are included.
 
 Repeated manual runs continue to update the same date safely using stable
 history IDs.
@@ -176,7 +202,8 @@ Unit tests cover:
 
 - Parsing delimiter-safe Git output.
 - Local-day filtering and timezone boundaries.
-- All-ref deduplication by SHA.
+- Local-branch-ref deduplication by SHA, with remote, tag, and stash refs
+  excluded.
 - Per-repository detected identity and multiple override identities.
 - Source-aware setup validation.
 - Partial repository failure and total failure.
