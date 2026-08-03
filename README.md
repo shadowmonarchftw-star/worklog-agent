@@ -1,4 +1,24 @@
+<div align="center">
+
 # AI Worklog Agent
+
+### Your commits, written up as a daily worklog.
+### It runs on your machine, on a schedule, and fills in the sheet you would have filled in yourself.
+
+[What it does](#what-it-does) ·
+[Local by design](#local-by-design) ·
+[Install](#macos-installation) ·
+[Setup](#one-time-setup) ·
+[Daily use](#daily-use) ·
+[Automation](#automatic-daily-worklogs)
+
+![licence](https://img.shields.io/github/license/shadowmonarchftw-star/worklog-agent?style=flat-square&label=licence&color=blue)
+![release](https://img.shields.io/github/v/release/shadowmonarchftw-star/worklog-agent?style=flat-square&label=release&color=success)
+![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square)
+![runtime](https://img.shields.io/badge/runtime-Electron%20%2B%20Next.js-black?style=flat-square)
+![backend](https://img.shields.io/badge/backend-none%20(127.0.0.1)-informational?style=flat-square)
+
+</div>
 
 AI Worklog Agent is a local desktop app that reads your GitHub commits and pull
 requests, generates a daily work summary with Gemini, saves local history in
