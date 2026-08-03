@@ -1,6 +1,7 @@
 const http = require("node:http");
 const { spawn } = require("node:child_process");
 const { createHash, randomBytes, timingSafeEqual } = require("node:crypto");
+const net = require("node:net");
 const path = require("node:path");
 
 const defaultHostname = "127.0.0.1";
@@ -21,6 +22,24 @@ function safeIdentityEqual(left, right) {
   const rightBuffer = Buffer.from(String(right));
   return leftBuffer.length === rightBuffer.length &&
     timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+async function availablePort(hostname, preferredPort) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once("error", (error) => {
+      if (error.code !== "EADDRINUSE") {
+        resolve(preferredPort);
+        return;
+      }
+      probe.listen(0, hostname);
+    });
+    probe.once("listening", () => {
+      const port = probe.address().port;
+      probe.close(() => resolve(port));
+    });
+    probe.listen(preferredPort, hostname);
+  });
 }
 
 async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {
@@ -126,24 +145,32 @@ async function startAppServer(config, dependencies = {}) {
     };
   }
 
-  if (config.mode === "development") {
+  const port = await availablePort(config.hostname, config.port);
+  const runtimeConfig = {
+    ...config,
+    port,
+    url: `http://${config.hostname}:${port}`,
+  };
+
+  if (runtimeConfig.mode === "development") {
     const child = spawnProcess("npm", ["run", "dev"], {
-      cwd: config.appPath,
+      cwd: runtimeConfig.appPath,
       env: {
         ...process.env,
-        AUTOMATION_CAPABILITY: config.capability,
-        AUTOMATION_LAUNCH_NONCE: config.launchNonce,
+        AUTOMATION_CAPABILITY: runtimeConfig.capability,
+        AUTOMATION_LAUNCH_NONCE: runtimeConfig.launchNonce,
+        WORKLOG_AGENT_PORT: String(runtimeConfig.port),
       },
       shell: process.platform === "win32",
       stdio: "inherit",
     });
 
     return {
-      automationAvailable: config.automationAvailable,
-      capability: config.capability,
-      launchNonce: config.launchNonce,
+      automationAvailable: runtimeConfig.automationAvailable,
+      capability: runtimeConfig.capability,
+      launchNonce: runtimeConfig.launchNonce,
       stop: async () => child.kill(),
-      url: config.url,
+      url: runtimeConfig.url,
     };
   }
 
@@ -152,25 +179,25 @@ async function startAppServer(config, dependencies = {}) {
       throw new Error("A utility process launcher is required for the packaged server.");
     }
 
-    const child = dependencies.forkUtility(config.serverPath, [], {
-      cwd: config.appPath,
+    const child = dependencies.forkUtility(runtimeConfig.serverPath, [], {
+      cwd: runtimeConfig.appPath,
       env: {
         ...process.env,
-        AUTOMATION_CAPABILITY: config.capability,
-        AUTOMATION_LAUNCH_NONCE: config.launchNonce,
-        HOSTNAME: config.hostname,
-        PORT: String(config.port),
+        AUTOMATION_CAPABILITY: runtimeConfig.capability,
+        AUTOMATION_LAUNCH_NONCE: runtimeConfig.launchNonce,
+        HOSTNAME: runtimeConfig.hostname,
+        PORT: String(runtimeConfig.port),
       },
       serviceName: "AI Worklog Agent Server",
       stdio: "inherit",
     });
 
     return {
-      automationAvailable: config.automationAvailable,
-      capability: config.capability,
-      launchNonce: config.launchNonce,
+      automationAvailable: runtimeConfig.automationAvailable,
+      capability: runtimeConfig.capability,
+      launchNonce: runtimeConfig.launchNonce,
       stop: async () => child.kill(),
-      url: config.url,
+      url: runtimeConfig.url,
     };
   }
 

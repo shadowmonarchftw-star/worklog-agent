@@ -210,7 +210,17 @@ app.whenReady().then(async () => {
 });
 }
 
-ipcMain.handle("automation:status", async () => automationRequest("settings"));
+ipcMain.handle("automation:status", async () => {
+  const data = await automationRequest("settings");
+  const schedulerStatus = scheduler?.status() || { active: false };
+  return {
+    ...data,
+    status: {
+      ...(data.status || {}),
+      scheduler: schedulerStatus,
+    },
+  };
+});
 ipcMain.handle("automation:run", async () => scheduler?.runNow() || {
   status: "unavailable",
   error: "Automation is unavailable in this mode.",
@@ -222,6 +232,9 @@ ipcMain.handle("automation:save-settings", async (_event, patch) => {
     headers: { Origin: appUrl },
   });
   await reconcileAutomationSettings(data.settings);
+  // Re-evaluate immediately after a schedule change so a run is not delayed
+  // until the next minute tick, especially when the time was just reached.
+  await scheduler?.resume();
   return data;
 });
 ipcMain.handle("local-git:choose-repository", async () => {

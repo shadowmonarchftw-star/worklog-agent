@@ -175,6 +175,25 @@ export default function Home() {
     return () => window.removeEventListener("focus", loadGoogleStatus);
   }, []);
 
+  useEffect(() => {
+    if (!window.worklogDesktop?.getAutomationStatus) return undefined;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const data = await window.worklogDesktop.getAutomationStatus();
+        if (active) setAutomationStatus(data.status || {});
+      } catch {
+        // The desktop bridge can briefly restart while the local server starts.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 15_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   // Held in a ref so the listener is bound once instead of re-subscribing on
   // every render (generateTodayWorklog is a new function each time).
   const shortcutRef = useRef({ generate: generateTodayWorklog, summary });
