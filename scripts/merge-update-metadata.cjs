@@ -1,6 +1,57 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const yaml = require("js-yaml");
+
+function scalar(value) {
+  const trimmed = value.trim();
+  if (trimmed === "null") return null;
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  return trimmed.replace(/^['"]|['"]$/g, "");
+}
+
+// electron-builder's updater metadata is a small, flat YAML document. Keeping
+// this parser local lets the release job publish without installing app deps.
+function readMetadata(text) {
+  const document = { files: [] };
+  let file;
+  for (const line of text.split(/\r?\n/)) {
+    const fileMatch = line.match(/^\s+-\s+([^:]+):\s*(.*)$/);
+    const fieldMatch = line.match(/^\s{4}([^:]+):\s*(.*)$/);
+    const topMatch = line.match(/^([^:]+):\s*(.*)$/);
+    if (fileMatch) {
+      file = {};
+      document.files.push(file);
+      file[fileMatch[1].trim()] = scalar(fileMatch[2]);
+    } else if (fieldMatch && file) {
+      file[fieldMatch[1].trim()] = scalar(fieldMatch[2]);
+    } else if (topMatch && topMatch[1] !== "files") {
+      document[topMatch[1].trim()] = scalar(topMatch[2]);
+    }
+  }
+  return document;
+}
+
+function quote(value) {
+  return JSON.stringify(String(value));
+}
+
+function writeMetadata(document) {
+  const lines = [`version: ${quote(document.version)}`, "files:"];
+  for (const file of document.files || []) {
+    const entries = Object.entries(file);
+    if (!entries.length) continue;
+    lines.push(`  - ${entries[0][0]}: ${typeof entries[0][1] === "number" ? entries[0][1] : quote(entries[0][1])}`);
+    for (const [key, value] of entries.slice(1)) {
+      lines.push(`    ${key}: ${typeof value === "number" ? value : quote(value)}`);
+    }
+  }
+  for (const [key, value] of Object.entries(document)) {
+    if (key === "version" || key === "files" || value == null) continue;
+    lines.push(`${key}: ${typeof value === "number" ? value : quote(value)}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
 
 // Each macOS architecture is built on its own runner, so electron-builder emits
 // a latest-mac.yml that lists only that runner's files. electron-updater picks
@@ -56,10 +107,10 @@ function main(argv) {
     throw new Error("Usage: merge-update-metadata.cjs <output.yml> <input.yml...>");
   }
 
-  const documents = inputs.map((file) => yaml.load(fs.readFileSync(file, "utf8")));
+  const documents = inputs.map((file) => readMetadata(fs.readFileSync(file, "utf8")));
   const merged = mergeUpdateMetadata(documents);
   fs.mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
-  fs.writeFileSync(output, yaml.dump(merged, { lineWidth: -1 }));
+  fs.writeFileSync(output, writeMetadata(merged));
   return merged;
 }
 
