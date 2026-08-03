@@ -198,7 +198,7 @@ function createScheduler({
 
     const timezone = timezoneAt(clock);
     const local = localParts(now, timezone);
-    if (!settings.days.includes(local.weekday) || completedDates.has(local.date)) {
+    if (settings.skipDate === local.date || !settings.days.includes(local.weekday) || completedDates.has(local.date)) {
       return { status };
     }
 

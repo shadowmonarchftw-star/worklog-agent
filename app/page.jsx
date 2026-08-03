@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { DashboardView } from "./components/DashboardView";
 import { SettingsView } from "./components/SettingsView";
+import { HistoryView } from "./components/HistoryView";
+import { AuditView } from "./components/AuditView";
+import { FirstRunWizard } from "./components/FirstRunWizard";
 import { createHistoryEntry } from "../lib/worklogHistory.mjs";
-import { localDateAt } from "../lib/localDate.mjs";
+import { enumerateDates, localDateAt } from "../lib/localDate.mjs";
 import {
   activityInputKey,
   canWriteToGoogle,
@@ -18,12 +21,16 @@ export default function Home() {
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [githubToken, setGithubToken] = useState("");
   const [githubAuthor, setGithubAuthor] = useState("");
+  const [commitExclusions, setCommitExclusions] = useState("");
+  const [repoFilters, setRepoFilters] = useState({});
   const [githubAuthors, setGithubAuthors] = useState([]);
   const [googleSheetLink, setGoogleSheetLink] = useState("");
   const [googleClientId, setGoogleClientId] = useState("");
   const [googleClientSecret, setGoogleClientSecret] = useState("");
   const [googleSheetTab, setGoogleSheetTab] = useState("Sheet1");
+  const [googleSheetTabs, setGoogleSheetTabs] = useState([]);
   const [defaultHours, setDefaultHours] = useState("8");
+  const [sheetMapping, setSheetMapping] = useState({ date: "A", summary: "B", hours: "D", reference: "" });
   const [googleConnected, setGoogleConnected] = useState(false);
   const [sheetStatus, setSheetStatus] = useState("");
   const [repos, setRepos] = useState([]);
@@ -32,18 +39,26 @@ export default function Home() {
   const [localRepositories, setLocalRepositories] = useState([]);
   const [localRepoMessage, setLocalRepoMessage] = useState("");
   const [workDate, setWorkDate] = useState(() => localDateAt());
+  const [rangeEnabled, setRangeEnabled] = useState(false);
+  const [rangeStart, setRangeStart] = useState(() => localDateAt());
+  const [rangeEnd, setRangeEnd] = useState(() => localDateAt());
   const [style, setStyle] = useState("standup");
+  const [summaryPreference, setSummaryPreference] = useState("");
   const [theme, setTheme] = useState("dark");
   const [activity, setActivity] = useState("");
   const [commitCount, setCommitCount] = useState(0);
   const [pullRequestCount, setPullRequestCount] = useState(0);
   const [summary, setSummary] = useState("");
+  const [rangeDrafts, setRangeDrafts] = useState([]);
+  const [rangeWritePrompt, setRangeWritePrompt] = useState(null);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [loading, setLoading] = useState("");
   const [githubLoading, setGithubLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const [view, setView] = useState("dashboard");
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [deletedHistory, setDeletedHistory] = useState(null);
   const [showActivity, setShowActivity] = useState(false);
   const [automation, setAutomation] = useState({
     enabled: false,
@@ -54,6 +69,14 @@ export default function Home() {
   const [automationStatus, setAutomationStatus] = useState({});
   const [automationBusy, setAutomationBusy] = useState(false);
   const [automationMessage, setAutomationMessage] = useState("");
+  const [healthChecks, setHealthChecks] = useState([]);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateProgress, setUpdateProgress] = useState(null);
+  const [wizardStep, setWizardStep] = useState(0);
+  // Read after mount, not in the initializer — localStorage is unavailable during
+  // the server render and a mismatch here breaks hydration.
+  const [wizardDismissed, setWizardDismissed] = useState(true);
   const requestIdRef = useRef(0);
   const initializedRef = useRef(false);
   const suppressResetRef = useRef(false);
@@ -84,6 +107,19 @@ export default function Home() {
   });
 
   useEffect(() => {
+    setWizardDismissed(localStorage.getItem("worklog-wizard-dismissed") === "1");
+  }, []);
+
+  useEffect(() => {
+    const listener = window.worklogDesktop?.onUpdateAvailable;
+    if (listener) listener(setUpdateInfo);
+    const progressListener = window.worklogDesktop?.onUpdateProgress;
+    if (progressListener) progressListener(setUpdateProgress);
+    const downloadedListener = window.worklogDesktop?.onUpdateDownloaded;
+    if (downloadedListener) downloadedListener(() => setUpdateProgress({ downloaded: true }));
+  }, []);
+
+  useEffect(() => {
     async function loadLocalData() {
       const [settingsResponse, historyResponse, automationResponse] = await Promise.all([
         fetch("/api/local/settings"),
@@ -96,12 +132,16 @@ export default function Home() {
         setGeminiApiKey(settings.geminiApiKey || "");
         setGithubToken(settings.githubToken || "");
         setGithubAuthor(settings.githubAuthor || "");
+        setCommitExclusions(settings.commitExclusions || "");
+        setRepoFilters(settings.repoFilters || {});
         setGoogleSheetLink(settings.googleSheetLink || "");
         setGoogleClientId(settings.googleClientId || "");
         setGoogleClientSecret(settings.googleClientSecret || "");
         setGoogleSheetTab(settings.googleSheetTab || "Sheet1");
         setDefaultHours(settings.defaultHours || "8");
+        setSheetMapping({ date: settings.googleDateColumn || "A", summary: settings.googleSummaryColumn || "B", hours: settings.googleHoursColumn || "D", reference: settings.googleReferenceColumn || "" });
         setStyle(settings.style === "timesheet" ? "sheet-cell" : settings.style || "standup");
+        setSummaryPreference(settings.summaryPreference || "");
         setTheme(settings.theme || "dark");
         setSelectedRepos(settings.selectedRepos || []);
         setActivitySource(settings.activitySource || "github");
@@ -134,6 +174,26 @@ export default function Home() {
     return () => window.removeEventListener("focus", loadGoogleStatus);
   }, []);
 
+  // Held in a ref so the listener is bound once instead of re-subscribing on
+  // every render (generateTodayWorklog is a new function each time).
+  const shortcutRef = useRef({ generate: generateTodayWorklog, summary });
+  shortcutRef.current = { generate: generateTodayWorklog, summary };
+
+  useEffect(() => {
+    function onShortcut(event) {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.target?.closest?.("input, textarea, select")) return;
+      const { generate, summary: currentSummary } = shortcutRef.current;
+      if (event.key === "Enter") { event.preventDefault(); void generate(); }
+      if (event.key.toLowerCase() === "c" && event.shiftKey && currentSummary) {
+        event.preventDefault();
+        void navigator.clipboard.writeText(currentSummary);
+      }
+    }
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
+
   useEffect(() => {
     if (!initializedRef.current) return;
     if (suppressResetRef.current) {
@@ -160,6 +220,12 @@ export default function Home() {
     }
   }
 
+  async function loadGoogleTabs() {
+    const response = await fetch("/api/google/tabs");
+    const data = await response.json();
+    if (response.ok) { setGoogleSheetTabs(data.tabs); if (!data.tabs.includes(googleSheetTab) && data.tabs[0]) { setGoogleSheetTab(data.tabs[0]); void saveSettings({ googleSheetTab: data.tabs[0] }); } }
+  }
+
   async function saveSettings(nextSettings = {}) {
     await fetch("/api/local/settings", {
       method: "POST",
@@ -174,11 +240,18 @@ export default function Home() {
           googleClientSecret,
           googleSheetTab,
           defaultHours,
+          googleDateColumn: sheetMapping.date,
+          googleSummaryColumn: sheetMapping.summary,
+          googleHoursColumn: sheetMapping.hours,
+          googleReferenceColumn: sheetMapping.reference,
           style,
+          summaryPreference,
           theme,
           selectedRepos,
           activitySource,
           localRepositories,
+          repoFilters,
+          commitExclusions,
           ...nextSettings,
         },
       }),
@@ -238,6 +311,19 @@ export default function Home() {
       setAutomationMessage(nextError.message || "Automatic worklog failed.");
     } finally {
       setAutomationBusy(false);
+    }
+  }
+
+  async function runHealthCheck() {
+    setHealthLoading(true);
+    try {
+      const response = await fetch("/api/setup/health");
+      const data = await response.json();
+      setHealthChecks(data.checks || []);
+    } catch (nextError) {
+      setHealthChecks([{ id: "app", label: "App", status: "fail", message: nextError.message || "Could not run setup check." }]);
+    } finally {
+      setHealthLoading(false);
     }
   }
 
@@ -344,6 +430,8 @@ export default function Home() {
         author: githubAuthor,
         activitySource,
         localRepositories,
+        excludeCommitPatterns: commitExclusions,
+        repoFilters,
       }),
     });
     const data = await response.json();
@@ -391,6 +479,7 @@ export default function Home() {
         workDate,
         style,
         activity: activityResult.activity,
+        preference: summaryPreference,
       }),
     });
     const data = await response.json();
@@ -415,31 +504,39 @@ export default function Home() {
 
     setSummary(data.summary);
     if (requestIdRef.current !== started.requestId) return;
+    const saved = await saveHistoryFor(workDate, activityResult, data.summary);
+    if (requestIdRef.current !== started.requestId) return;
+    if (saved) setHistory(saved);
+    await saveSettings();
+    if (requestIdRef.current !== started.requestId) return;
+  }
+
+  async function saveHistoryFor(date, activityResult, nextSummary) {
     const entry = createHistoryEntry({
-      workDate,
+      workDate: date,
       style,
       selectedRepos: activitySource === "local"
         ? localRepositories.map((repo) => repo.displayName)
         : selectedRepos,
       activity: activityResult.activity,
-      summary: data.summary,
+      summary: nextSummary,
+      commitCount: activityResult.commitCount || 0,
+      pullRequestCount: activityResult.pullRequestCount || 0,
+      activitySource,
     });
-    const historyResponse = await fetch("/api/local/history", {
+    const response = await fetch("/api/local/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ entry }),
     });
-    if (requestIdRef.current !== started.requestId) return;
-    if (historyResponse.ok) {
-      const { history: savedHistory } = await historyResponse.json();
-      setHistory(savedHistory);
-    }
-    await saveSettings();
-    if (requestIdRef.current !== started.requestId) return;
-    await writeSummaryToSheet(data.summary);
+    if (!response.ok) return null;
+    const { history: savedHistory } = await response.json();
+    setHistory(savedHistory);
+    return savedHistory;
   }
 
   async function generateTodayWorklog() {
+    if (rangeEnabled) return generateDateRange();
     const result = await fetchGithubActivity();
     if (!result) return;
     if (!hasWorkActivity(result)) {
@@ -452,6 +549,48 @@ export default function Home() {
       return;
     }
     await generateSummaryFromActivity(result);
+  }
+
+  async function generateDateRange() {
+    if (rangeStart > rangeEnd) { setError("Start date must be before end date."); return; }
+    setLoading("range"); setError(""); setSheetStatus("");
+    const dates = enumerateDates(rangeStart, rangeEnd);
+    const drafts = [];
+    for (const date of dates) {
+      const activityResponse = await fetch("/api/github/activity", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ githubToken, repoFullNames: selectedRepos, date, author: githubAuthor, activitySource, localRepositories, excludeCommitPatterns: commitExclusions, repoFilters }) });
+      const activityData = await activityResponse.json();
+      if (!activityResponse.ok) { setError(activityData.error || `Could not fetch ${date}.`); break; }
+      if (!hasWorkActivity(activityData)) continue;
+      const summaryResponse = await fetch("/api/generate-summary", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ geminiApiKey, workDate: date, style, preference: summaryPreference, activity: activityData.activity }) });
+      const summaryData = await summaryResponse.json();
+      if (!summaryResponse.ok) { setError(summaryData.error || `Could not summarize ${date}.`); break; }
+      drafts.push({ date, summary: summaryData.summary, selected: true });
+      await saveHistoryFor(date, activityData, summaryData.summary);
+      setWorkDate(date); setSummary(summaryData.summary); setActivity(activityData.activity); setCommitCount(activityData.commitCount || 0); setPullRequestCount(activityData.pullRequestCount || 0);
+    }
+    const checkResponse = await fetch("/api/google/check-dates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dates: drafts.map((draft) => draft.date) }) });
+    if (checkResponse.ok) {
+      const { rows } = await checkResponse.json();
+      drafts.forEach((draft) => { draft.existing = Boolean(rows[draft.date]); draft.selected = !draft.existing; });
+    }
+    setRangeDrafts(drafts);
+    setLoading("");
+    setSheetStatus(`${drafts.length} day${drafts.length === 1 ? "" : "s"} ready for review.`);
+  }
+
+  async function writeRangeDrafts() {
+    const selected = rangeDrafts.filter((draft) => draft.selected);
+    const existing = selected.filter((draft) => draft.existing);
+    if (!selected.length) { setSheetStatus("Select at least one day to write."); return; }
+    if (existing.length) { setRangeWritePrompt({ selected, existing }); return; }
+    await performRangeWrite(selected);
+  }
+
+  async function performRangeWrite(selected) {
+    setRangeWritePrompt(null); setLoading("range-write");
+    for (const draft of selected) await writeSummaryToSheet(draft.summary, draft.date);
+    setLoading("");
+    setSheetStatus(`${selected.length} day${selected.length === 1 ? "" : "s"} written to Google Sheets.`);
   }
 
   async function inspectActivity() {
@@ -475,7 +614,7 @@ export default function Home() {
     setTimeout(loadGoogleStatus, 2500);
   }
 
-  async function writeSummaryToSheet(nextSummary) {
+  async function writeSummaryToSheet(nextSummary, targetDate = workDate) {
     if (!canWriteToGoogle({ googleSheetLink, googleConnected, summary: nextSummary })) {
       if (googleSheetLink && !googleConnected) {
         setSheetStatus("Connect Google in Settings to write this summary.");
@@ -487,7 +626,7 @@ export default function Home() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        workDate,
+        workDate: targetDate,
         summary: nextSummary,
         reference: activitySource === "local"
           ? localRepositories.map((repo) => repo.displayName).join(", ")
@@ -526,6 +665,7 @@ export default function Home() {
   }
 
   async function deleteHistoryEntry(entryId) {
+    const removed = history.find((entry) => entry.id === entryId);
     const response = await fetch("/api/local/history", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -534,7 +674,14 @@ export default function Home() {
     if (response.ok) {
       const { history: savedHistory } = await response.json();
       setHistory(savedHistory);
+      setDeletedHistory(removed || null);
     }
+  }
+
+  async function undoDeleteHistory() {
+    if (!deletedHistory) return;
+    const response = await fetch("/api/local/history", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entry: deletedHistory }) });
+    if (response.ok) { const { history: savedHistory } = await response.json(); setHistory(savedHistory); setDeletedHistory(null); }
   }
 
   function changeTheme(nextTheme) {
@@ -550,8 +697,10 @@ export default function Home() {
     automationStatus,
     automationUnavailableMessage,
     defaultHours,
+    sheetMapping,
     geminiApiKey,
     githubAuthor,
+    commitExclusions,
     githubAuthors,
     githubLoading,
     githubToken,
@@ -563,16 +712,24 @@ export default function Home() {
     googleConnected,
     googleSheetLink,
     googleSheetTab,
+    googleSheetTabs,
+    healthChecks,
+    healthLoading,
     onAuthorChange: (value) => { setGithubAuthor(value); void saveSettings({ githubAuthor: value }); },
+    onCommitExclusionsChange: (value) => { setCommitExclusions(value); void saveSettings({ commitExclusions: value }); },
+    repoFilters,
+    onRepoFilterChange: (repo, value) => { const next = { ...repoFilters, [repo]: value }; setRepoFilters(next); void saveSettings({ repoFilters: next }); },
     onChange: saveAutomation,
     onConnectGoogle: connectGoogle,
     onDefaultHoursChange: setDefaultHours,
+    onSheetMappingChange: (patch) => { const next = { ...sheetMapping, ...patch }; setSheetMapping(next); void saveSettings({ googleDateColumn: next.date, googleSummaryColumn: next.summary, googleHoursColumn: next.hours, googleReferenceColumn: next.reference }); },
     onGeminiApiKeyChange: setGeminiApiKey,
     onGithubTokenChange: setGithubToken,
     onGoogleClientIdChange: setGoogleClientId,
     onGoogleClientSecretChange: setGoogleClientSecret,
     onGoogleSheetLinkChange: setGoogleSheetLink,
     onGoogleSheetTabChange: setGoogleSheetTab,
+    onLoadGoogleTabs: loadGoogleTabs,
     onLoadRepos: loadRepos,
     onAddLocalRepository: addLocalRepository,
     onActivitySourceChange: (value) => {
@@ -582,14 +739,17 @@ export default function Home() {
     onRemoveLocalRepository: removeLocalRepository,
     onUpdateLocalRepository: updateLocalRepository,
     onRunNow: runAutomationNow,
+    onRunHealthCheck: runHealthCheck,
     onSave: saveSettings,
     onStyleChange: setStyle,
+    onSummaryPreferenceChange: (value) => { setSummaryPreference(value); void saveSettings({ summaryPreference: value }); },
     onThemeChange: changeTheme,
     onToggleRepo: toggleRepo,
     repos,
     selectedRepos,
     sheetStatus,
     style,
+    summaryPreference,
     theme,
   };
 
@@ -601,7 +761,13 @@ export default function Home() {
       onThemeChange={changeTheme}
       onViewChange={setView}
       theme={theme}
+      updateInfo={updateInfo}
+      updateProgress={updateProgress}
+      onDownloadUpdate={() => window.worklogDesktop?.downloadUpdate()}
+      onInstallUpdate={() => window.worklogDesktop?.installUpdate()}
       view={view}
+      overlay={!wizardDismissed && !setupComplete ? <FirstRunWizard step={wizardStep} onStepChange={setWizardStep} onOpenSettings={(section) => { setWizardDismissed(true); setView("settings"); if (section === "health") void runHealthCheck(); }} onDismiss={() => { localStorage.setItem("worklog-wizard-dismissed", "1"); setWizardDismissed(true); }} /> : null}
+      historyCount={history.length}
     >
       {view === "dashboard" ? (
         <DashboardView
@@ -614,6 +780,20 @@ export default function Home() {
           history={history}
           loading={loading}
           onCopy={() => navigator.clipboard.writeText(summary)}
+          onSummaryChange={setSummary}
+          onWriteSummary={() => writeSummaryToSheet(summary)}
+          rangeEnabled={rangeEnabled}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          onRangeEnabledChange={setRangeEnabled}
+          onRangeStartChange={setRangeStart}
+          onRangeEndChange={setRangeEnd}
+          rangeDrafts={rangeDrafts}
+          onRangeDraftChange={(date, patch) => setRangeDrafts((current) => current.map((draft) => draft.date === date ? { ...draft, ...patch } : draft))}
+          onWriteRange={writeRangeDrafts}
+          rangeWritePrompt={rangeWritePrompt}
+          onConfirmRangeWrite={performRangeWrite}
+          onCancelRangeWrite={() => setRangeWritePrompt(null)}
           onDeleteHistory={deleteHistoryEntry}
           onGenerate={generateTodayWorklog}
           onInspect={inspectActivity}
@@ -630,7 +810,9 @@ export default function Home() {
           summary={summary}
           workDate={workDate}
         />
-      ) : (
+      ) : view === "history" ? (
+        <HistoryView history={history} query={historyQuery} deletedHistory={deletedHistory} onQueryChange={setHistoryQuery} onDelete={deleteHistoryEntry} onUndoDelete={undoDeleteHistory} onRestore={(entry) => { restoreHistoryEntry(entry); setView("dashboard"); }} />
+      ) : view === "audit" ? <AuditView /> : (
         <SettingsView {...sharedSettings} />
       )}
     </AppShell>

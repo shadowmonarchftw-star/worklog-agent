@@ -4,6 +4,8 @@ import {
   LayoutDashboard,
   Moon,
   Settings,
+  History,
+  ClipboardList,
   Sun,
 } from "lucide-react";
 
@@ -16,6 +18,12 @@ export function AppShell({
   onViewChange,
   theme,
   view,
+  historyCount,
+  updateInfo,
+  onDownloadUpdate,
+  updateProgress,
+  onInstallUpdate,
+  overlay,
 }) {
   return (
     <main className="app-shell" data-theme={theme}>
@@ -27,6 +35,7 @@ export function AppShell({
         </div>
       </header>
 
+      {updateInfo && <div className="update-banner">{updateProgress?.downloaded ? <>Version {updateInfo.version} ready <button type="button" onClick={onInstallUpdate}>Restart to install</button></> : updateProgress?.percent != null ? <>Downloading update... {updateProgress.percent}%</> : <>Version {updateInfo.version} available <button type="button" onClick={onDownloadUpdate}>Download update</button></>}</div>}
       <div className="app-frame">
         <aside className="sidebar">
           <p className="nav-label">Navigation</p>
@@ -40,6 +49,8 @@ export function AppShell({
               <LayoutDashboard size={17} />
               <span>Dashboard</span>
             </button>
+            <button className={view === "history" ? "active" : ""} disabled={navigationDisabled} type="button" onClick={() => onViewChange("history")}><History size={17} /><span>History{historyCount ? ` (${historyCount})` : ""}</span></button>
+            <button className={view === "audit" ? "active" : ""} disabled={navigationDisabled} type="button" onClick={() => onViewChange("audit")}><ClipboardList size={17} /><span>Sheet audit</span></button>
             <button
               className={view === "settings" ? "active" : ""}
               disabled={navigationDisabled}
@@ -90,6 +101,7 @@ export function AppShell({
 
         <section className="main-surface">{children}</section>
       </div>
+      {overlay}
     </main>
   );
 }

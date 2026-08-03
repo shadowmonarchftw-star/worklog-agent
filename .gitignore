@@ -6,6 +6,7 @@ release/
 npm-debug.log*
 .DS_Store
 .ai/
+CLAUDE.md
 .worktrees/
 .playwright-cli/
 output/

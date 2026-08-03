@@ -173,14 +173,22 @@ access was revoked or the OAuth configuration changed.
    `npm run desktop`.
 2. Select the work date.
 3. Click **Generate Worklog**.
-4. Review the generated summary.
+4. Review the generated summary and edit it if needed.
+5. Click **Write to Sheet**.
 
-If Google Sheets is connected, the app finds the matching date in column A and
-updates that row. If the date does not exist, it adds the date on a new row.
-The app only writes the date, generated summary, and hours. It leaves task
-references and comments untouched.
+Generating and writing are separate steps, so nothing reaches the sheet until
+the summary is reviewed. Automatic daily worklogs still write on their own.
 
-The required sheet mapping is:
+To generate several days at once, turn on the date range option, pick a start
+and end date, then review the per-day list before writing. Days that already
+have a row in the sheet are unticked by default.
+
+When writing, the app finds the matching date in the date column and updates
+that row. If the date does not exist, it adds the date on a new row. The app
+only writes the date, generated summary, hours, and — if you map one — a task
+reference. Every other column is left untouched.
+
+The default sheet mapping is:
 
 | Column | Value |
 | --- | --- |
@@ -190,9 +198,31 @@ The required sheet mapping is:
 | D | Hours |
 | E | Not written by the app |
 
-The date in column A must use `M/D/YYYY`, for example `7/31/2026`. The sheet
-can have additional headers, formatting, and formulas. The configured sheet tab
-name must exactly match the tab shown at the bottom of Google Sheets.
+If your sheet uses a different layout, change the column letters under
+**Settings > Google Sheets**. Leave the task reference column empty to keep the
+app from writing it at all.
+
+The date in the date column must use `M/D/YYYY`, for example `7/31/2026`. The
+sheet can have additional headers, formatting, and formulas. The configured
+sheet tab name must exactly match the tab shown at the bottom of Google Sheets.
+
+## Filtering Noisy Commits
+
+Open **Settings > Git activity** and add comma-separated words under commit
+exclusions, for example `merge, chore, bump`. Any commit whose message contains
+one of those words is left out of the worklog. Matching ignores capitalisation.
+
+Each selected repository also has its own filter box for exclusions that should
+only apply to that repository. Both lists are combined.
+
+## Setup Check
+
+**Settings > Setup Check** verifies the whole chain in one click: GitHub token
+or local repositories, Gemini, Google Sheets access, sheet headers, and whether
+saved credentials can still be decrypted. Run it after changing any setting.
+
+If the credential check fails, the app's credential key changed or was lost —
+re-enter the affected tokens in Settings.
 
 ## Automatic Daily Worklogs
 
@@ -253,6 +283,11 @@ macOS:
 ```
 
 Deleting this database resets the app and removes its locally saved settings.
+
+Tokens and API keys inside the database are encrypted with a per-machine
+credential key stored beside it as `credential-key`. Deleting that file without
+deleting the database makes the saved credentials unreadable — Setup Check will
+report this, and re-entering them in Settings fixes it.
 
 ## Troubleshooting
 

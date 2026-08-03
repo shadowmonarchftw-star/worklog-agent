@@ -9,6 +9,7 @@ import {
   KeyRound,
   MonitorCog,
   RefreshCw,
+  ShieldCheck,
   Sparkles,
   Table2,
   Trash2,
@@ -18,6 +19,7 @@ import { PageHeader } from "./DashboardView";
 import { AutomationSection } from "./AutomationSection";
 
 const sections = [
+  { id: "health", label: "Setup check", icon: ShieldCheck },
   { id: "credentials", label: "Credentials", icon: KeyRound },
   { id: "github", label: "Git activity", icon: GitFork },
   { id: "google", label: "Google Sheets", icon: Table2 },
@@ -54,6 +56,7 @@ export function SettingsView(props) {
           </nav>
           <div className="settings-content">
             {section === "credentials" && <CredentialsSection {...props} />}
+            {section === "health" && <HealthCheckSection {...props} />}
             {section === "github" && <GithubSection {...props} />}
             {section === "google" && <GoogleSection {...props} />}
             {section === "automation" && <AutomationSection {...props} />}
@@ -78,6 +81,30 @@ function SettingsPanel({ children, description, title }) {
   );
 }
 
+function HealthCheckSection({ healthChecks, healthLoading, onRunHealthCheck }) {
+  return (
+    <SettingsPanel title="Setup check" description="Test connections before generating or scheduling a worklog.">
+      <div className="settings-action-row">
+        <div><strong>Connection diagnostics</strong><span>Checks selected activity source, Gemini, and Google Sheets access.</span></div>
+        <button className="secondary-button" type="button" disabled={healthLoading} onClick={onRunHealthCheck}>
+          <RefreshCw className={healthLoading ? "spin" : ""} size={15} />
+          {healthLoading ? "Checking" : "Run check"}
+        </button>
+      </div>
+      {healthChecks?.length ? (
+        <div className="health-check-list">
+          {healthChecks.map((item) => (
+            <div className={`health-check-item ${item.status}`} key={item.id}>
+              <span className="health-check-icon" aria-hidden="true">{item.status === "pass" ? "✓" : item.status === "skip" ? "-" : "!"}</span>
+              <div><strong>{item.label}</strong><span>{item.message}</span></div>
+            </div>
+          ))}
+        </div>
+      ) : <p className="settings-empty">Run a check after entering your setup details.</p>}
+    </SettingsPanel>
+  );
+}
+
 function CredentialsSection({
   activitySource,
   geminiApiKey,
@@ -87,7 +114,7 @@ function CredentialsSection({
   onSave,
 }) {
   return (
-    <SettingsPanel title="Credentials" description="Stored locally in SQLite and never included in summaries.">
+    <SettingsPanel title="Credentials" description="Stored locally and encrypted on desktop. Never included in summaries.">
       {activitySource === "github" && (
       <SettingsField label="GitHub fine-grained token" hint="Used to read repositories, commits, and pull requests.">
         <input
@@ -115,6 +142,10 @@ function CredentialsSection({
 }
 
 function GithubSection({
+  commitExclusions,
+  onCommitExclusionsChange,
+  repoFilters,
+  onRepoFilterChange,
   activitySource,
   githubAuthor,
   githubAuthors,
@@ -200,6 +231,12 @@ function GithubSection({
           {githubLoading ? "Loading" : "Load Repos"}
         </button>
       </div>
+      <SettingsField label="Exclude commit messages" hint="Comma-separated words. Matching commits are ignored.">
+        <input value={commitExclusions} placeholder="merge, bump version" onChange={(event) => onCommitExclusionsChange(event.target.value)} />
+        <div className="filter-presets">
+          {[['Clean merges', 'merge, merged'], ['Dependency noise', 'bump, dependabot, dependencies'], ['Generated changes', 'format, generated, lockfile']].map(([label, value]) => <button className="secondary-button" type="button" key={label} onClick={() => onCommitExclusionsChange(value)}>{label}</button>)}
+        </div>
+      </SettingsField>
 
       <div className="repo-list redesigned">
         {!repos.length && <p className="settings-empty">No repositories loaded.</p>}
@@ -211,6 +248,7 @@ function GithubSection({
               onChange={() => onToggleRepo(repo.fullName)}
             />
             <span>{repo.fullName}</span>
+            <input className="repo-filter-input" aria-label={`Filters for ${repo.fullName}`} placeholder="Repo filters" value={repoFilters?.[repo.fullName] || ""} onChange={(event) => onRepoFilterChange(repo.fullName, event.target.value)} />
           </label>
         ))}
       </div>
@@ -227,6 +265,10 @@ function GoogleSection({
   googleConnected,
   googleSheetLink,
   googleSheetTab,
+  googleSheetTabs,
+  onLoadGoogleTabs,
+  sheetMapping,
+  onSheetMappingChange,
   onConnectGoogle,
   onDefaultHoursChange,
   onGoogleClientIdChange,
@@ -255,11 +297,19 @@ function GoogleSection({
       </SettingsField>
       <div className="field-grid compact">
         <SettingsField label="Sheet tab">
-          <input value={googleSheetTab} placeholder="Sheet1" onChange={(e) => onGoogleSheetTabChange(e.target.value)} onBlur={() => onSave({ googleSheetTab })} />
+          {googleSheetTabs.length ? <select value={googleSheetTab} onChange={(e) => { onGoogleSheetTabChange(e.target.value); onSave({ googleSheetTab: e.target.value }); }}>{googleSheetTabs.map((tab) => <option key={tab}>{tab}</option>)}</select> : <input value={googleSheetTab} placeholder="Sheet1" onChange={(e) => onGoogleSheetTabChange(e.target.value)} onBlur={() => onSave({ googleSheetTab })} />}
+          <button className="secondary-button" type="button" onClick={onLoadGoogleTabs}>Load tabs</button>
         </SettingsField>
         <SettingsField label="Default hours">
           <input value={defaultHours} inputMode="decimal" placeholder="8" onChange={(e) => onDefaultHoursChange(e.target.value)} onBlur={() => onSave({ defaultHours })} />
         </SettingsField>
+      </div>
+      <div className="field-grid">
+        {[["date", "Date column"], ["summary", "Task column"], ["hours", "Hours column"], ["reference", "Reference column"]].map(([key, label]) => (
+          <SettingsField key={key} label={label} hint={key === "reference" ? "Optional. Leave blank to protect this column." : "Use a column letter, for example A."}>
+            <input value={sheetMapping[key]} placeholder={key === "reference" ? "Optional" : "A"} onChange={(event) => onSheetMappingChange({ [key]: event.target.value.toUpperCase() })} />
+          </SettingsField>
+        ))}
       </div>
       <button className="primary-action settings-connect" disabled={!googleClientId || !googleClientSecret} type="button" onClick={onConnectGoogle}>
         {googleConnected ? "Reconnect Google" : "Connect Google"}
@@ -269,7 +319,7 @@ function GoogleSection({
   );
 }
 
-function OutputSection({ onSave, onStyleChange, style }) {
+function OutputSection({ onSave, onStyleChange, style, summaryPreference, onSummaryPreferenceChange }) {
   return (
     <SettingsPanel title="Output" description="Choose how Gemini formats the generated office update.">
       <SettingsField label="Summary style" hint="Sheet cell is the simplest option for one-cell worklogs.">
@@ -283,6 +333,9 @@ function OutputSection({ onSave, onStyleChange, style }) {
             <option value="bullet-points">Bullet points</option>
           </select>
         </SelectWrap>
+      </SettingsField>
+      <SettingsField label="Summary preferences" hint="Optional rules Gemini should follow every time.">
+        <textarea value={summaryPreference} placeholder="Use plain English. Keep it concise." onChange={(event) => onSummaryPreferenceChange(event.target.value)} />
       </SettingsField>
     </SettingsPanel>
   );

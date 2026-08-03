@@ -1,6 +1,7 @@
 import { upsertGoogleSheetRow } from "../../../../lib/googleSheetsProvider.mjs";
 import { buildWorklogRow } from "../../../../lib/googleSheets.mjs";
-import { getAppDb, getSetting, setSetting } from "../../../../lib/localDb.mjs";
+import { getAppDb, getSetting, saveSheetWrite, setSetting } from "../../../../lib/localDb.mjs";
+import { randomUUID } from "node:crypto";
 
 const settingsKey = "app-settings";
 const googleTokensKey = "google-tokens";
@@ -32,6 +33,18 @@ export async function POST(request) {
       },
       saveTokens: (nextTokens) => setSetting(db, googleTokensKey, nextTokens),
     });
+    // The sheet write already succeeded. A failed audit insert must not turn this
+    // into a 400 that makes the user retry a write that already landed.
+    try {
+      saveSheetWrite(db, {
+        id: randomUUID(),
+        workDate,
+        tab: settings.googleSheetTab || "Sheet1",
+        rowNumber: result.rowNumber,
+        action: result.action,
+        createdAt: new Date().toISOString(),
+      });
+    } catch {}
     return Response.json({ ok: true, ...result });
   } catch (error) {
     return Response.json({ error: error.safeMessage || error.message }, { status: 400 });

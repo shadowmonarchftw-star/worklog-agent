@@ -20,6 +20,7 @@ export async function POST(request) {
       workDate: body.workDate,
       style: body.style,
       activity: body.activity,
+      preference: body.preference,
       model: process.env.GEMINI_MODEL,
     }));
   } catch (error) {

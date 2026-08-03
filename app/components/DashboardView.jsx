@@ -29,6 +29,8 @@ export function DashboardView({
   warning,
   githubAuthor,
   history,
+  historyQuery,
+  onHistoryQueryChange,
   loading,
   localRepositories,
   onCopy,
@@ -37,6 +39,20 @@ export function DashboardView({
   onInspect,
   onOpenSettings,
   onRestoreHistory,
+  onSummaryChange,
+  onWriteSummary,
+  rangeEnabled,
+  rangeStart,
+  rangeEnd,
+  onRangeEnabledChange,
+  onRangeStartChange,
+  onRangeEndChange,
+  rangeDrafts,
+  onRangeDraftChange,
+  onWriteRange,
+  rangeWritePrompt,
+  onConfirmRangeWrite,
+  onCancelRangeWrite,
   onWorkDateChange,
   pullRequestCount,
   selectedRepos,
@@ -46,8 +62,9 @@ export function DashboardView({
   style,
   summary,
   workDate,
+  showHistory = false,
 }) {
-  const busy = loading === "activity" || loading === "summary";
+  const busy = loading === "activity" || loading === "summary" || loading === "range" || loading === "range-write";
   const monitoredCount = activitySource === "local"
     ? localRepositories.length
     : selectedRepos.length;
@@ -83,14 +100,16 @@ export function DashboardView({
           )}
 
           <section className="control-panel">
-            <Field label="Date">
+            <label className="range-toggle"><input type="checkbox" checked={rangeEnabled} onChange={(event) => onRangeEnabledChange(event.target.checked)} /><span>Date range</span></label>
+            {!rangeEnabled && <Field label="Date">
               <input
                 type="date"
                 value={workDate}
                 disabled={busy}
                 onChange={(event) => onWorkDateChange(event.target.value)}
               />
-            </Field>
+            </Field>}
+            {rangeEnabled && <><Field label="From"><input type="date" value={rangeStart} disabled={busy} onChange={(event) => onRangeStartChange(event.target.value)} /></Field><Field label="To"><input type="date" value={rangeEnd} disabled={busy} onChange={(event) => onRangeEndChange(event.target.value)} /></Field></>}
             <div className="scope-field">
               <span className="field-label">Scope</span>
               <div className="scope-value">
@@ -106,7 +125,7 @@ export function DashboardView({
             >
               {busy && <span className="spinner dark" />}
               {!busy && <Sparkles size={16} />}
-              {loading === "summary" ? "Generating" : loading === "activity" ? "Fetching" : "Generate Worklog"}
+              {loading === "range" ? "Generating range" : loading === "summary" ? "Generating" : loading === "activity" ? "Fetching" : rangeEnabled ? "Generate range" : "Generate Worklog"}
             </button>
             <button
               className="secondary-button inspect-button"
@@ -121,6 +140,16 @@ export function DashboardView({
 
           {error && <div className="error-banner" role="alert">{error}</div>}
           {warning && <div className="warning-banner" role="status">{warning}</div>}
+
+          {rangeEnabled && rangeDrafts.length > 0 && (
+            <section className="panel range-review">
+              <div className="panel-header"><div><p className="panel-eyebrow">Review</p><h2>Daily summaries</h2></div><button className="primary-action" disabled={busy} type="button" onClick={onWriteRange}>{loading === "range-write" ? "Writing" : "Write all to Sheet"}</button></div>
+              <div className="range-draft-list">
+                {rangeDrafts.map((draft) => <label className="range-draft" key={draft.date}><span><input type="checkbox" checked={draft.selected} onChange={(event) => onRangeDraftChange(draft.date, { selected: event.target.checked })} />{draft.date}<small>{draft.existing ? "Existing row" : "New row"}</small></span><textarea value={draft.summary} onChange={(event) => onRangeDraftChange(draft.date, { summary: event.target.value })} /></label>)}
+              </div>
+            </section>
+          )}
+          {rangeWritePrompt && <div className="write-prompt" role="dialog" aria-modal="true"><div className="write-prompt-card"><p className="panel-eyebrow">Confirm Sheet write</p><h2>Review selected dates</h2><p>{rangeWritePrompt.selected.length} selected: {rangeWritePrompt.selected.filter((draft) => !draft.existing).length} new, {rangeWritePrompt.existing.length} existing.</p>{rangeWritePrompt.existing.length > 0 && <small>Will replace: {rangeWritePrompt.existing.map((draft) => draft.date).join(", ")}</small>}<div className="write-prompt-actions"><button className="secondary-button" type="button" onClick={onCancelRangeWrite}>Cancel</button><button className="secondary-button" type="button" onClick={() => onConfirmRangeWrite(rangeWritePrompt.selected.filter((draft) => !draft.existing))}>Write new only</button><button className="primary-action" type="button" onClick={() => onConfirmRangeWrite(rangeWritePrompt.selected)}>Write selected</button></div></div></div>}
 
           <div className="content-grid">
             <section className="panel summary-panel">
@@ -139,7 +168,7 @@ export function DashboardView({
                   </div>
                 )}
                 {summary && loading !== "summary" && (
-                  <pre className="summary-text">{summary}</pre>
+                  <textarea className="summary-editor" aria-label="Worklog summary" value={summary} onChange={(event) => onSummaryChange(event.target.value)} />
                 )}
 
                 {(summary || sheetStatus) && (
@@ -151,10 +180,10 @@ export function DashboardView({
                       </span>
                     )}
                     {summary && (
-                      <button className="compact-button" type="button" onClick={onCopy}>
-                        <Clipboard size={14} />
-                        Copy
-                      </button>
+                      <div className="summary-actions">
+                        <button className="compact-button" type="button" onClick={onCopy}><Clipboard size={14} />Copy</button>
+                        <button className="primary-action compact-button" type="button" onClick={onWriteSummary}><Check size={14} />Write to Sheet</button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -169,13 +198,17 @@ export function DashboardView({
                 <StatLine label="Repositories" value={selectedRepos.length} />
               </section>
 
-              <section className="panel history-panel">
+              {showHistory && <section className="panel history-panel">
                 <PanelHeader eyebrow="Saved" title="Summary history" />
+                <input className="history-search" value={historyQuery} placeholder="Search date, repo, or summary" onChange={(event) => onHistoryQueryChange(event.target.value)} />
                 {!history.length && (
                   <div className="empty-history">No summaries yet. Generate your first worklog.</div>
                 )}
                 <div className="history-list">
-                  {history.map((entry) => (
+                  {history.filter((entry) => {
+                    const query = historyQuery.trim().toLowerCase();
+                    return !query || [entry.workDate, entry.summary, ...(entry.repos || [])].join(" ").toLowerCase().includes(query);
+                  }).map((entry) => (
                     <article className="history-row" key={entry.id}>
                       <button
                         className="history-restore"
@@ -199,7 +232,8 @@ export function DashboardView({
                     </article>
                   ))}
                 </div>
-              </section>
+                {history.length > 0 && !history.some((entry) => [entry.workDate, entry.summary, ...(entry.repos || [])].join(" ").toLowerCase().includes(historyQuery.trim().toLowerCase())) && <div className="empty-history">No matching summaries.</div>}
+              </section>}
             </aside>
           </div>
 

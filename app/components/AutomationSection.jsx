@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock3, Play, Power } from "lucide-react";
+import { CalendarOff, Clock3, Play, Power } from "lucide-react";
 
 const weekdays = [
   [1, "M"],
@@ -16,6 +16,16 @@ function formatStatus(value) {
   if (!value) return "Not yet";
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString();
+}
+
+function errorAdvice(message) {
+  const text = String(message || "").toLowerCase();
+  if (text.includes("google") || text.includes("sheet")) return "Check Google connection, sheet link, tab, and headers.";
+  if (text.includes("gemini")) return "Check the Gemini API key and model availability.";
+  if (text.includes("github") || text.includes("token")) return "Check the GitHub token, author, and repository access.";
+  if (text.includes("local") || text.includes("git")) return "Check the repository folder and local Git identity.";
+  if (text.includes("foreign key") || text.includes("database")) return "Run Setup Check, then restart the app if it continues.";
+  return "Run Setup Check and try again.";
 }
 
 export function AutomationSection({
@@ -107,6 +117,15 @@ export function AutomationSection({
           <Play size={15} />
           {automationBusy ? "Running" : "Run now"}
         </button>
+        <button
+          className="secondary-button automation-run"
+          disabled={!available || automationBusy}
+          type="button"
+          onClick={() => onChange({ skipDate: automation.skipDate ? null : new Date().toISOString().slice(0, 10) })}
+        >
+          <CalendarOff size={15} />
+          {automation.skipDate ? "Resume today" : "Skip today"}
+        </button>
 
         {!available && (
           <p className="settings-status">{automationUnavailableMessage}</p>
@@ -117,7 +136,8 @@ export function AutomationSection({
           <div><dt>Next run</dt><dd>{formatStatus(automationStatus?.nextRun)}</dd></div>
           <div><dt>Last attempt</dt><dd>{formatStatus(automationStatus?.lastAttempt?.startedAt)}</dd></div>
           <div><dt>Last successful write</dt><dd>{formatStatus(automationStatus?.lastSuccess?.completedAt)}</dd></div>
-          <div><dt>Latest error</dt><dd>{automationStatus?.lastError?.errorMessage || "None"}</dd></div>
+          <div><dt>Latest error</dt><dd>{automationStatus?.lastError?.errorMessage || "None"}{automationStatus?.lastError?.errorMessage && <small className="automation-advice">{errorAdvice(automationStatus.lastError.errorMessage)}</small>}</dd></div>
+          <div><dt>Today</dt><dd>{automation.skipDate ? "Skipped" : "Scheduled"}</dd></div>
         </dl>
       </div>
     </section>

@@ -14,6 +14,8 @@ export async function POST(request) {
       until: suppliedUntil,
       activitySource,
       localRepositories,
+      excludeCommitPatterns,
+      repoFilters,
     } = await request.json();
     if (activitySource === "local") {
       const timezone = localTimezone();
@@ -25,12 +27,16 @@ export async function POST(request) {
         date,
         timezone,
         ...range,
+        excludeCommitPatterns,
+        repoFilters,
       }));
     }
     const repos = repoFullNames?.length ? repoFullNames : [repoFullName].filter(Boolean);
     return Response.json(await collectGithubActivity({
       token: githubToken, repos, date, author,
       since: suppliedSince, until: suppliedUntil,
+      excludeCommitPatterns,
+      repoFilters,
     }));
   } catch (error) {
     return Response.json(

@@ -7,11 +7,14 @@ const {
   nativeImage,
   Notification,
   powerMonitor,
+  safeStorage,
   shell,
   Tray,
   utilityProcess,
 } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const path = require("node:path");
+const fs = require("node:fs");
 const { getServerConfig, startAppServer, waitForAppUrl } = require("./app-server.cjs");
 const { registerExternalLinkHandler } = require("./external-links.cjs");
 const { createScheduler } = require("./scheduler.cjs");
@@ -34,6 +37,24 @@ let mainWindow;
 let tray;
 let automationSettings = {};
 let isQuitting = false;
+
+function credentialKey() {
+  const keyPath = path.join(app.getPath("userData"), "credential-key");
+  try {
+    const stored = fs.readFileSync(keyPath, "utf8").trim();
+    if (stored && safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(Buffer.from(stored, "base64"));
+    }
+    if (stored) return stored;
+  } catch {}
+  const next = require("node:crypto").randomBytes(32).toString("base64url");
+  fs.mkdirSync(path.dirname(keyPath), { recursive: true });
+  const stored = safeStorage.isEncryptionAvailable()
+    ? safeStorage.encryptString(next).toString("base64")
+    : next;
+  fs.writeFileSync(keyPath, stored, { mode: 0o600 });
+  return next;
+}
 
 async function automationRequest(path, options = {}) {
   const response = await fetch(`${appUrl}/api/automation/${path}`, {
@@ -158,6 +179,7 @@ app.whenReady().then(async () => {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
   });
+  process.env.WORKLOG_AGENT_CREDENTIAL_KEY ||= credentialKey();
   appServer = await startAppServer(serverConfig, {
     forkUtility: (modulePath, args, options) =>
       utilityProcess.fork(modulePath, args, options),
@@ -220,12 +242,32 @@ ipcMain.handle("local-git:inspect-repository", async (_event, repositoryPath) =>
   });
   return data.repository;
 });
+// autoUpdater is only wired up when packaged, so answer plainly in dev instead of
+// rejecting into the renderer.
+ipcMain.handle("update:download", async () => {
+  if (!app.isPackaged) return { ok: false, reason: "unavailable-in-development" };
+  await autoUpdater.downloadUpdate();
+  return { ok: true };
+});
+ipcMain.handle("update:install", () => {
+  if (!app.isPackaged) return { ok: false, reason: "unavailable-in-development" };
+  autoUpdater.quitAndInstall();
+  return { ok: true };
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin" && !shouldKeepAlive(automationSettings)) {
     app.quit();
   }
 });
+
+if (app.isPackaged) {
+  autoUpdater.autoDownload = false;
+  autoUpdater.on("update-available", (info) => mainWindow?.webContents.send("update:available", info));
+  autoUpdater.on("download-progress", (info) => mainWindow?.webContents.send("update:progress", { percent: Math.round(info.percent) }));
+  autoUpdater.on("update-downloaded", (info) => mainWindow?.webContents.send("update:downloaded", info));
+  app.whenReady().then(() => void autoUpdater.checkForUpdates().catch(() => {}));
+}
 
 const shutdown = createShutdownHandler({
   getScheduler: () => scheduler,

@@ -6,7 +6,7 @@ import {
 } from "../../../../lib/automationStore.mjs";
 import { getAppDb } from "../../../../lib/localDb.mjs";
 
-const allowedFields = new Set(["enabled", "time", "days", "startAtLogin"]);
+const allowedFields = new Set(["enabled", "time", "days", "startAtLogin", "skipDate"]);
 
 function publicSettings(settings) {
   return Object.fromEntries(
@@ -30,6 +30,9 @@ function validatePatch(value) {
   }
   if ("startAtLogin" in value && typeof value.startAtLogin !== "boolean") {
     throw new TypeError("startAtLogin must be a boolean");
+  }
+  if ("skipDate" in value && value.skipDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(value.skipDate)) {
+    throw new TypeError("skipDate must use YYYY-MM-DD");
   }
   if ("time" in value && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value.time)) {
     throw new TypeError("Automation time must use HH:mm");
