@@ -6,6 +6,7 @@ import { DashboardView } from "./components/DashboardView";
 import { SettingsView } from "./components/SettingsView";
 import { HistoryView } from "./components/HistoryView";
 import { AuditView } from "./components/AuditView";
+import { MissingDaysPanel } from "./components/MissingDaysPanel";
 import { FirstRunWizard } from "./components/FirstRunWizard";
 import { createHistoryEntry } from "../lib/worklogHistory.mjs";
 import { enumerateDates, localDateAt } from "../lib/localDate.mjs";
@@ -812,7 +813,7 @@ export default function Home() {
         />
       ) : view === "history" ? (
         <HistoryView history={history} query={historyQuery} deletedHistory={deletedHistory} onQueryChange={setHistoryQuery} onDelete={deleteHistoryEntry} onUndoDelete={undoDeleteHistory} onRestore={(entry) => { restoreHistoryEntry(entry); setView("dashboard"); }} />
-      ) : view === "audit" ? <AuditView /> : (
+      ) : view === "audit" ? <AuditView /> : view === "missing" ? <div className="page-scroll"><MissingDaysPanel history={history} onBackfill={(dates) => { setRangeEnabled(true); setRangeStart(dates[0]); setRangeEnd(dates[dates.length - 1]); setView("dashboard"); }} /></div> : (
         <SettingsView {...sharedSettings} />
       )}
     </AppShell>

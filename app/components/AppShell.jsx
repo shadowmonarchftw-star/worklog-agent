@@ -6,6 +6,7 @@ import {
   Settings,
   History,
   ClipboardList,
+  CalendarSearch,
   Sun,
 } from "lucide-react";
 
@@ -51,6 +52,7 @@ export function AppShell({
             </button>
             <button className={view === "history" ? "active" : ""} disabled={navigationDisabled} type="button" onClick={() => onViewChange("history")}><History size={17} /><span>History{historyCount ? ` (${historyCount})` : ""}</span></button>
             <button className={view === "audit" ? "active" : ""} disabled={navigationDisabled} type="button" onClick={() => onViewChange("audit")}><ClipboardList size={17} /><span>Sheet audit</span></button>
+            <button className={view === "missing" ? "active" : ""} disabled={navigationDisabled} type="button" onClick={() => onViewChange("missing")}><CalendarSearch size={17} /><span>Missing days</span></button>
             <button
               className={view === "settings" ? "active" : ""}
               disabled={navigationDisabled}
