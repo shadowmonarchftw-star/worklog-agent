@@ -20,9 +20,9 @@
     "better-sqlite3": "^13.0.1",
     "electron-updater": "^6.8.9",
     "lucide-react": "^1.28.0",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "next": "^16.2.12",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "electron": "^43.2.0",
@@ -121,5 +121,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "overrides": {
+    "postcss": "^8.5.18",
+    "sharp": "^0.35.0"
   }
 }
