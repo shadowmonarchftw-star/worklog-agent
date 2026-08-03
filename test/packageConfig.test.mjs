@@ -7,7 +7,7 @@ test("packages only Electron code and copies the standalone server as a resource
     await readFile(new URL("../package.json", import.meta.url), "utf8"),
   );
 
-  assert.deepEqual(packageJson.build.files, [
+  assert.deepEqual(packageJson.build.files.slice(0, 3), [
     "electron/**/*",
     "package.json",
     "!node_modules/**/*",
@@ -56,4 +56,70 @@ test("installer workflows smoke-test unpacked apps before installers", async () 
   assert.match(macWorkflow, /unpacked_dir: mac-arm64/);
   assert.match(macWorkflow, /unpacked_dir: mac\r?\n/);
   assert.match(macWorkflow, /matrix\.unpacked_dir/);
+});
+
+test("every third-party module the Electron main process requires is packaged", async () => {
+  const packageJson = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  const packaged = new Set(
+    packageJson.build.files
+      .filter((entry) => entry.startsWith("node_modules/"))
+      .map((entry) => entry.replace(/^node_modules\//, "").replace(/\/\*\*\/\*$/, "")),
+  );
+
+  // build.files excludes node_modules wholesale, so anything the main process
+  // requires at load time must be re-included by name or the packaged app dies
+  // with MODULE_NOT_FOUND before it can start its server.
+  //
+  // Only unindented requires are checked: those run on load. Indented ones sit
+  // inside a branch or function, and the dev-only `require("next")` in
+  // app-server.cjs is deliberately never reached in a packaged build.
+  const sources = ["main.cjs", "app-server.cjs", "scheduler.cjs", "shutdown.cjs",
+    "lifecycle.cjs", "external-links.cjs", "preload.cjs"];
+  const required = new Set();
+  for (const file of sources) {
+    const code = await readFile(new URL(`../electron/${file}`, import.meta.url), "utf8");
+    for (const match of code.matchAll(/^[^\s].*?require\(\s*["']([^"']+)["']\s*\)/gm)) {
+      const name = match[1];
+      if (name.startsWith(".") || name.startsWith("node:") || name === "electron") continue;
+      required.add(name.split("/").slice(0, name.startsWith("@") ? 2 : 1).join("/"));
+    }
+  }
+
+  assert.ok(required.size > 0, "expected at least one third-party require");
+  for (const name of required) {
+    assert.ok(
+      packaged.has(name),
+      `electron/ requires "${name}" but build.files does not package node_modules/${name}`,
+    );
+  }
+});
+
+test("packaged third-party modules include their transitive dependencies", async () => {
+  const packageJson = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  const packaged = new Set(
+    packageJson.build.files
+      .filter((entry) => entry.startsWith("node_modules/"))
+      .map((entry) => entry.replace(/^node_modules\//, "").replace(/\/\*\*\/\*$/, "")),
+  );
+
+  for (const name of [...packaged]) {
+    let manifest;
+    try {
+      manifest = JSON.parse(
+        await readFile(new URL(`../node_modules/${name}/package.json`, import.meta.url), "utf8"),
+      );
+    } catch {
+      continue;
+    }
+    for (const dependency of Object.keys(manifest.dependencies || {})) {
+      assert.ok(
+        packaged.has(dependency),
+        `node_modules/${name} depends on "${dependency}", which build.files does not package`,
+      );
+    }
+  }
 });

@@ -263,6 +263,9 @@ app.on("window-all-closed", () => {
 
 if (app.isPackaged) {
   autoUpdater.autoDownload = false;
+  // An "error" event with no listener is an uncaught exception on an EventEmitter,
+  // which would take the whole app down on a routine update-check network failure.
+  autoUpdater.on("error", () => {});
   autoUpdater.on("update-available", (info) => mainWindow?.webContents.send("update:available", info));
   autoUpdater.on("download-progress", (info) => mainWindow?.webContents.send("update:progress", { percent: Math.round(info.percent) }));
   autoUpdater.on("update-downloaded", (info) => mainWindow?.webContents.send("update:downloaded", info));
