@@ -40,9 +40,6 @@ The installer is currently unsigned. Windows SmartScreen may show an
 **Unknown publisher** warning. Click **More info**, confirm the file came from
 this repository, and choose **Run anyway**.
 
-Version `0.1.6` and newer use the same standalone runtime on Windows and macOS.
-This fixes the blank window caused by loading SQLite from the packaged archive.
-
 No Node.js, Git, PowerShell, or `npm` commands are required when using the
 installer.
 
@@ -333,9 +330,8 @@ still unavailable, restart Windows and try again.
 
 ### Windows shows a blank app window
 
-Install version `0.1.6` or newer. Older packages could fail while loading the
-local SQLite module. Uninstall the old version, then install the newest
-`AI-Worklog-Agent-Windows` artifact.
+Uninstall the current version, then install the newest
+`AI-Worklog-Agent-Windows` artifact from Releases.
 
 ## Development Commands
 
