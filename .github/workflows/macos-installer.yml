@@ -56,10 +56,23 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           NEXT_TELEMETRY_DISABLED: "1"
 
+      # Each runner builds one architecture, so each writes a latest-mac.yml that
+      # lists only its own files. They are merged in the release job; renaming
+      # here keeps them from overwriting each other on download.
+      - name: Name update metadata per architecture
+        run: mv release/latest-mac.yml release/latest-mac-${{ matrix.arch }}.yml
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: AI-Worklog-Agent-macOS-${{ matrix.arch }}
-          path: release/*.dmg
+          # The zip is required: electron-updater's macOS path throws
+          # ERR_UPDATER_ZIP_FILE_NOT_FOUND when the metadata lists only a dmg.
+          path: |
+            release/*.dmg
+            release/*.dmg.blockmap
+            release/*.zip
+            release/*.zip.blockmap
+            release/latest-mac-${{ matrix.arch }}.yml
           if-no-files-found: error
           retention-days: 30

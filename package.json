@@ -11,7 +11,7 @@
     "build": "next build && node scripts/prepare-standalone.cjs",
     "dist": "npm run build && electron-builder",
     "dist:dir": "npm run build && electron-builder --dir",
-    "dist:mac": "npm run build && electron-builder --mac dmg --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
     "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "start": "next start",
     "test": "node --test test/*.test.mjs"
@@ -111,7 +111,8 @@
       "icon": "build/icon.png",
       "identity": "-",
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ]
     },
     "nsis": {

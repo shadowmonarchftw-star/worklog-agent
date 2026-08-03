@@ -123,3 +123,41 @@ test("packaged third-party modules include their transitive dependencies", async
     }
   }
 });
+
+test("release publishes the metadata the in-app updater needs", async () => {
+  const release = await readFile(
+    new URL("../.github/workflows/release.yml", import.meta.url), "utf8",
+  );
+  const windows = await readFile(
+    new URL("../.github/workflows/windows-installer.yml", import.meta.url), "utf8",
+  );
+  const macos = await readFile(
+    new URL("../.github/workflows/macos-installer.yml", import.meta.url), "utf8",
+  );
+
+  // v0.3.4 shipped an updater that could never see a release because these
+  // files were built but never uploaded.
+  assert.match(windows, /release\/latest\.yml/);
+  assert.match(macos, /release\/latest-mac-\$\{\{ matrix\.arch \}\}\.yml/);
+  assert.match(macos, /release\/\*\.zip/);
+
+  assert.match(release, /merge-update-metadata\.cjs/);
+  assert.match(release, /test -f release\/latest\.yml/);
+  assert.match(release, /test -f release\/latest-mac\.yml/);
+});
+
+test("macOS builds a zip so the updater can download an update", async () => {
+  const packageJson = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  // electron-updater's MacUpdater throws ERR_UPDATER_ZIP_FILE_NOT_FOUND when the
+  // published metadata offers only a dmg.
+  assert.ok(
+    packageJson.build.mac.target.includes("zip"),
+    "mac target must include zip for auto-update to work",
+  );
+  assert.ok(packageJson.build.mac.target.includes("dmg"));
+  // The CLI target list overrides build.mac.target, so the script must ask for
+  // the zip too or the config above is silently ignored.
+  assert.match(packageJson.scripts["dist:mac"], /--mac dmg zip/);
+});

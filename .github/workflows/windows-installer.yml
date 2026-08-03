@@ -47,6 +47,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AI-Worklog-Agent-Windows
-          path: release/*Setup*.exe
+          # latest.yml and the blockmap are what electron-updater reads to find
+          # and differentially download a new version. Without them the in-app
+          # updater cannot see the release at all.
+          path: |
+            release/*Setup*.exe
+            release/*Setup*.exe.blockmap
+            release/latest.yml
           if-no-files-found: error
           retention-days: 30
