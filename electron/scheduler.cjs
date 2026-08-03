@@ -42,6 +42,13 @@ function localParts(date, timezone) {
   };
 }
 
+function ranBefore(createdAt, dueMinutes, timezone) {
+  if (!createdAt) return false;
+  const created = new Date(createdAt);
+  if (Number.isNaN(created.valueOf())) return false;
+  return localParts(created, timezone).minutes < dueMinutes;
+}
+
 function sanitize(value) {
   return String(value?.message || value || "Automation failed.")
     .replace(
@@ -94,6 +101,11 @@ function createScheduler({
   let reconciliationNeeded = true;
   let stopped = false;
   const completedDates = new Set();
+  const schedulerState = {
+    startedAt: null,
+    lastCheckAt: null,
+    lastResult: null,
+  };
 
   async function exclusive(operation) {
     if (stopped) return { outcome: "stopped" };
@@ -202,12 +214,21 @@ function createScheduler({
       return { status };
     }
 
+    const [hour, minute] = settings.time.split(":").map(Number);
+    const dueMinutes = hour * 60 + minute;
+
     const latest = status.lastAutomaticAttempt;
     if (
       latest?.workDate === local.date &&
       latest.trigger === "automatic"
     ) {
-      if (["success", "no_activity", "running"].includes(latest.status)) {
+      if (["success", "running"].includes(latest.status)) {
+        return { status };
+      }
+      // A no_activity result from before the scheduled time describes a day
+      // that had not produced work yet, so it must not consume the scheduled
+      // run. Without a readable timestamp, keep treating it as terminal.
+      if (latest.status === "no_activity" && !ranBefore(latest.createdAt, dueMinutes, timezone)) {
         return { status };
       }
       if (latest.status === "failed") {
@@ -221,12 +242,11 @@ function createScheduler({
           trigger: "automatic",
           workDate: local.date,
           timezone,
-        }, local.date, signal);
+        }, local.minutes < dueMinutes ? null : local.date, signal);
       }
     }
 
-    const [hour, minute] = settings.time.split(":").map(Number);
-    if (local.minutes < hour * 60 + minute) return { status };
+    if (local.minutes < dueMinutes) return { status };
     return execute({
       trigger: "automatic",
       workDate: local.date,
@@ -235,7 +255,17 @@ function createScheduler({
   }
 
   function tick(now = clock.now()) {
-    return exclusive((signal) => evaluate(new Date(now), signal));
+    schedulerState.lastCheckAt = new Date(now).toISOString();
+    return exclusive(async (signal) => {
+      const result = await evaluate(new Date(now), signal);
+      // evaluate() reuses `status` for the full status object when it declines
+      // to run, so only a string is a real outcome worth surfacing.
+      const outcome = typeof result?.status === "string"
+        ? result.status
+        : result?.outcome;
+      schedulerState.lastResult = typeof outcome === "string" ? outcome : null;
+      return result;
+    });
   }
 
   function resume(now = clock.now()) {
@@ -278,6 +308,14 @@ function createScheduler({
 
   function start() {
     stopped = false;
+    schedulerState.startedAt = new Date(clock.now()).toISOString();
+    // Install the wake timer before network recovery. A slow or failed first
+    // check must not prevent the scheduler from becoming active.
+    if (!timer) {
+      timer = clock.setInterval(() => {
+        void tick();
+      }, WAKE_INTERVAL_MS);
+    }
     return exclusive(async (signal) => {
       const recovery = await reconcile(signal);
       let result = recovery.result;
@@ -288,16 +326,21 @@ function createScheduler({
       ) {
         result = await evaluate(new Date(clock.now()), signal);
       }
-      if (!timer) {
-        timer = clock.setInterval(() => {
-          void tick();
-        }, WAKE_INTERVAL_MS);
-      }
       return result;
     });
   }
 
-  return { start, stop, tick, resume, runNow };
+  return {
+    start,
+    stop,
+    tick,
+    resume,
+    runNow,
+    status: () => ({
+      active: !stopped && Boolean(timer),
+      ...schedulerState,
+    }),
+  };
 }
 
 module.exports = { createScheduler };

@@ -18,6 +18,31 @@ function formatStatus(value) {
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString();
 }
 
+function schedulerLabel(scheduler) {
+  if (!scheduler?.active) return "Not active";
+  return "Active";
+}
+
+function todayLabel(automation, automationStatus) {
+  if (automation.skipDate) return "Skipped";
+  const attempt = automationStatus?.lastAutomaticAttempt;
+  const today = new Date().toLocaleDateString("en-CA");
+  if (attempt?.workDate !== today) return "Scheduled";
+  if (attempt.status === "success") return "Completed";
+  if (attempt.status === "running") return "Running";
+  // A no_activity result only settles the day once it happened at or after the
+  // scheduled time; an earlier one still leaves the scheduled run due.
+  if (attempt.status === "no_activity") {
+    const [hour, minute] = String(automation.time || "").split(":").map(Number);
+    const created = new Date(attempt.createdAt);
+    if (Number.isNaN(created.valueOf()) || Number.isNaN(hour)) return "No activity";
+    return created.getHours() * 60 + created.getMinutes() < hour * 60 + minute
+      ? "Scheduled"
+      : "No activity";
+  }
+  return "Scheduled";
+}
+
 function errorAdvice(message) {
   const text = String(message || "").toLowerCase();
   if (text.includes("google") || text.includes("sheet")) return "Check Google connection, sheet link, tab, and headers.";
@@ -133,11 +158,13 @@ export function AutomationSection({
         {automationMessage && <p className="settings-status">{automationMessage}</p>}
 
         <dl className="automation-status">
+          <div><dt>Scheduler</dt><dd>{schedulerLabel(automationStatus?.scheduler)}<small className="automation-advice">Last check: {formatStatus(automationStatus?.scheduler?.lastCheckAt)}{automationStatus?.scheduler?.lastResult ? ` · ${automationStatus.scheduler.lastResult}` : ""}</small></dd></div>
           <div><dt>Next run</dt><dd>{formatStatus(automationStatus?.nextRun)}</dd></div>
-          <div><dt>Last attempt</dt><dd>{formatStatus(automationStatus?.lastAttempt?.startedAt)}</dd></div>
+          <div><dt>Last automatic run</dt><dd>{formatStatus(automationStatus?.lastAutomaticAttempt?.createdAt)}{automationStatus?.lastAutomaticAttempt?.status && <small className="automation-advice">Status: {automationStatus.lastAutomaticAttempt.status}</small>}</dd></div>
+          <div><dt>Last manual run</dt><dd>{formatStatus(automationStatus?.lastManualAttempt?.createdAt)}{automationStatus?.lastManualAttempt?.status && <small className="automation-advice">Status: {automationStatus.lastManualAttempt.status}</small>}</dd></div>
           <div><dt>Last successful write</dt><dd>{formatStatus(automationStatus?.lastSuccess?.completedAt)}</dd></div>
-          <div><dt>Latest error</dt><dd>{automationStatus?.lastError?.errorMessage || "None"}{automationStatus?.lastError?.errorMessage && <small className="automation-advice">{errorAdvice(automationStatus.lastError.errorMessage)}</small>}</dd></div>
-          <div><dt>Today</dt><dd>{automation.skipDate ? "Skipped" : "Scheduled"}</dd></div>
+          <div><dt>Latest automatic error</dt><dd>{automationStatus?.lastAutomaticError?.errorMessage ? <>{automationStatus.lastAutomaticError.errorMessage}<small className="automation-advice">{formatStatus(automationStatus.lastAutomaticError.completedAt)} · {errorAdvice(automationStatus.lastAutomaticError.errorMessage)}</small></> : "None"}</dd></div>
+          <div><dt>Today</dt><dd>{todayLabel(automation, automationStatus)}</dd></div>
         </dl>
       </div>
     </section>

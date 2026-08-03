@@ -517,3 +517,99 @@ test("Electron composition starts scheduling only for authenticated managed serv
   assert.match(source, /powerMonitor\.on\("resume"/);
   assert.match(source, /void scheduler\.resume\(\)/);
 });
+
+test("no_activity recorded before the scheduled time does not consume the day", async () => {
+  const { calls, scheduler } = harness({
+    status: {
+      nextRun: null,
+      lastAutomaticAttempt: {
+        workDate: "2026-07-30",
+        trigger: "automatic",
+        status: "no_activity",
+        createdAt: "2026-07-30T09:40:33+05:45",
+      },
+    },
+  });
+
+  await scheduler.tick(new Date("2026-07-30T17:29:59+05:45"));
+  assert.equal(calls.run.length, 0);
+  await scheduler.tick(new Date("2026-07-30T17:30:00+05:45"));
+
+  assert.equal(calls.run.length, 1);
+  assert.equal(calls.run[0].trigger, "automatic");
+  assert.equal(calls.run[0].workDate, "2026-07-30");
+});
+
+test("no_activity recorded at or after the scheduled time stays terminal", async () => {
+  const { calls, scheduler } = harness({
+    status: {
+      nextRun: null,
+      lastAutomaticAttempt: {
+        workDate: "2026-07-30",
+        trigger: "automatic",
+        status: "no_activity",
+        createdAt: "2026-07-30T17:30:00+05:45",
+      },
+    },
+  });
+
+  await scheduler.tick(new Date("2026-07-30T18:00:00+05:45"));
+
+  assert.equal(calls.run.length, 0);
+});
+
+test("an early retry that finds nothing still leaves the scheduled run due", async () => {
+  let status = {
+    nextRun: null,
+    lastAutomaticAttempt: {
+      workDate: "2026-07-30",
+      trigger: "automatic",
+      status: "failed",
+      retryDueAt: "2026-07-30T04:00:00.000Z",
+    },
+  };
+  const calls = { run: [] };
+  const clock = fakeClock();
+  const scheduler = createScheduler({
+    clock,
+    loadSettings: async () => ({
+      enabled: true,
+      time: "17:30",
+      days: [1, 2, 3, 4, 5],
+    }),
+    loadStatus: async () => status,
+    recover: async () => ({ results: [] }),
+    run: async (input) => {
+      calls.run.push(input);
+      return { status: "no_activity" };
+    },
+    notify: () => {},
+  });
+
+  // 09:45 local: the failed attempt's retry is due, finds no commits yet.
+  await scheduler.tick(new Date("2026-07-30T09:45:00+05:45"));
+  assert.equal(calls.run.length, 1);
+  status = {
+    nextRun: null,
+    lastAutomaticAttempt: {
+      workDate: "2026-07-30",
+      trigger: "automatic",
+      status: "no_activity",
+      createdAt: "2026-07-30T09:45:00+05:45",
+    },
+  };
+
+  // 17:30 local: the real scheduled run must still happen.
+  await scheduler.tick(new Date("2026-07-30T17:30:00+05:45"));
+  assert.equal(calls.run.length, 2);
+});
+
+test("scheduler exposes the last result as a string, never an object", async () => {
+  const { scheduler } = harness();
+
+  await scheduler.tick(new Date("2026-07-30T17:29:59+05:45"));
+  assert.equal(scheduler.status().lastResult, null);
+
+  await scheduler.tick(new Date("2026-07-30T17:30:00+05:45"));
+  assert.equal(scheduler.status().lastResult, "success");
+});
