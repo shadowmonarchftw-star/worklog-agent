@@ -415,6 +415,43 @@ test("recovery marks absent or unchanged prewrite rows for retry", async () => {
   }
 });
 
+test("recovery retries an unchanged sheet row and verifies the write", async () => {
+  const completions = [];
+  let writes = 0;
+  const attempt = {
+    id: "a",
+    workDate: "2026-07-30",
+    intendedRow: intended,
+    intendedRowHash: rowHash(intended),
+    preWriteRowHash: "row_absent",
+  };
+  await recoverInterruptedRuns({
+    ownerId: "r",
+    now: new Date("2026-07-30T12:00:00.000Z"),
+    lease: {
+      interruptStale: async () => {},
+      listInterrupted: async () => [attempt],
+      claimRecovery: async () => ({ outcome: "claimed", attempt }),
+      renew: async () => true,
+      release: async () => {},
+    },
+    store: {
+      complete: async (value) => completions.push(value),
+      cleanup: async () => {},
+    },
+    providers: {
+      sheets: {
+        readRow: async () => (writes ? intended : null),
+        upsertRow: async () => { writes += 1; },
+      },
+    },
+    settings,
+    tokens,
+  });
+  assert.equal(writes, 1);
+  assert.equal(completions[0].status, "success");
+});
+
 test("recovery detects a different sheet row as conflict without writing", async () => {
   let writes = 0;
   const completions = [];
