@@ -1194,3 +1194,34 @@ test("a later success replaces a no_activity outcome on the day", () => {
   assert.equal(day.terminal_outcome, "success");
   assert.equal(day.success_attempt_id, scheduled.attempt.id);
 });
+
+test("a later automatic success clears the reported automatic error", () => {
+  const { first } = tempDbHandles();
+  const failed = claim(first, { trigger: "automatic" });
+  transitionAutomationAttempt(first, {
+    attemptId: failed.attempt.id,
+    to: "failed",
+    ownerId: "runner",
+    now: "2026-07-30T00:15:00.000Z",
+    errorMessage: "Sheet write was not observed; retry is required.",
+  });
+
+  assert.equal(
+    getAutomationStatus(first, { now: T0 }).lastAutomaticError?.id,
+    failed.attempt.id,
+  );
+
+  const scheduled = claim(first, {
+    trigger: "automatic",
+    ownerId: "scheduled",
+    now: "2026-07-30T12:00:00.000Z",
+  });
+  transitionAutomationAttempt(first, {
+    attemptId: scheduled.attempt.id,
+    to: "success",
+    ownerId: "scheduled",
+    now: "2026-07-30T12:00:30.000Z",
+  });
+
+  assert.equal(getAutomationStatus(first, { now: T0 }).lastAutomaticError, null);
+});
