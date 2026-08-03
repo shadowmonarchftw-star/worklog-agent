@@ -485,25 +485,42 @@ test("stale sweep uses thirty minutes independently of lease expiry", () => {
   );
 });
 
-test("automatic runs allow only a failed retry and no activity blocks retry", () => {
-  for (const terminal of ["success", "no_activity"]) {
-    const { first } = tempDbHandles();
-    const started = claim(first, { trigger: "automatic" });
-    transitionAutomationAttempt(first, {
-      attemptId: started.attempt.id,
-      to: terminal,
-      ownerId: "runner",
-      now: "2026-07-30T10:01:00.000Z",
-    });
-    assert.equal(
-      claim(first, {
-        trigger: "automatic",
-        ownerId: "retry",
-        now: "2026-07-30T10:02:00.000Z",
-      }).outcome,
-      "retry_limit",
-    );
-  }
+test("automatic runs allow only a failed retry and success blocks retry", () => {
+  const success = tempDbHandles().first;
+  const succeeded = claim(success, { trigger: "automatic" });
+  transitionAutomationAttempt(success, {
+    attemptId: succeeded.attempt.id,
+    to: "success",
+    ownerId: "runner",
+    now: "2026-07-30T10:01:00.000Z",
+  });
+  assert.equal(
+    claim(success, {
+      trigger: "automatic",
+      ownerId: "retry",
+      now: "2026-07-30T10:02:00.000Z",
+    }).outcome,
+    "retry_limit",
+  );
+
+  // A no_activity attempt wrote nothing, so the day is not finished and the
+  // scheduled run must still be claimable. The scheduler decides when to stop.
+  const quiet = tempDbHandles().first;
+  const empty = claim(quiet, { trigger: "automatic" });
+  transitionAutomationAttempt(quiet, {
+    attemptId: empty.attempt.id,
+    to: "no_activity",
+    ownerId: "runner",
+    now: "2026-07-30T10:01:00.000Z",
+  });
+  assert.equal(
+    claim(quiet, {
+      trigger: "automatic",
+      ownerId: "retry",
+      now: "2026-07-30T10:02:00.000Z",
+    }).outcome,
+    "claimed",
+  );
 
   const { first } = tempDbHandles();
   const initial = claim(first, { trigger: "automatic" });
@@ -1112,4 +1129,68 @@ test("cleanup removes old failed attempts and an empty open day", () => {
     first.prepare("SELECT COUNT(*) AS count FROM automation_days").get().count,
     0,
   );
+});
+
+test("a no_activity attempt does not spend the automatic retry budget", () => {
+  const { first } = tempDbHandles();
+
+  // 06:00 the scheduled run fails.
+  const failed = claim(first, { trigger: "automatic" });
+  transitionAutomationAttempt(first, {
+    attemptId: failed.attempt.id,
+    to: "failed",
+    ownerId: "runner",
+    now: "2026-07-30T00:15:00.000Z",
+  });
+
+  // 09:40 the retry runs before any commits exist and finds nothing.
+  const quiet = claim(first, {
+    trigger: "automatic",
+    ownerId: "retry",
+    now: "2026-07-30T03:55:00.000Z",
+  });
+  assert.equal(quiet.outcome, "claimed");
+  transitionAutomationAttempt(first, {
+    attemptId: quiet.attempt.id,
+    to: "no_activity",
+    ownerId: "retry",
+    now: "2026-07-30T03:55:30.000Z",
+  });
+
+  // 17:45 the real scheduled run must still be claimable.
+  assert.equal(
+    claim(first, {
+      trigger: "automatic",
+      ownerId: "scheduled",
+      now: "2026-07-30T12:00:00.000Z",
+    }).outcome,
+    "claimed",
+  );
+});
+
+test("a later success replaces a no_activity outcome on the day", () => {
+  const { first } = tempDbHandles();
+  const quiet = claim(first, { trigger: "automatic" });
+  transitionAutomationAttempt(first, {
+    attemptId: quiet.attempt.id,
+    to: "no_activity",
+    ownerId: "runner",
+    now: "2026-07-30T03:55:00.000Z",
+  });
+
+  const scheduled = claim(first, {
+    trigger: "automatic",
+    ownerId: "scheduled",
+    now: "2026-07-30T12:00:00.000Z",
+  });
+  transitionAutomationAttempt(first, {
+    attemptId: scheduled.attempt.id,
+    to: "success",
+    ownerId: "scheduled",
+    now: "2026-07-30T12:00:30.000Z",
+  });
+
+  const day = first.prepare("SELECT * FROM automation_days").get();
+  assert.equal(day.terminal_outcome, "success");
+  assert.equal(day.success_attempt_id, scheduled.attempt.id);
 });
