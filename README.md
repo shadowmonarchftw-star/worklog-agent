@@ -7,6 +7,25 @@ SQLite, and can write the result to a Google Sheet.
 Each developer uses their own GitHub token, Gemini API key, GitHub author, and
 local settings.
 
+## What it does
+
+- Pulls a day's activity from the GitHub API, or from repositories on your own
+  machine using local `git`.
+- Turns that activity into a short daily summary with Gemini.
+- Keeps every generated summary in local history so you can review or redo a
+  day.
+- Optionally upserts the day into a Google Sheet, matching the date in column
+  A and writing only the date, summary, and hours columns.
+- Can run on a schedule from the tray and catch up on days it missed.
+
+## Local by design
+
+There is no backend server for this project. The app runs a Next.js server
+bound to `127.0.0.1` inside an Electron shell. Your tokens, API keys, and
+worklog history stay in a SQLite file in your own user data directory, with
+secrets encrypted at rest using a key held in the OS keychain. See
+[SECURITY.md](SECURITY.md) for the full security model.
+
 ## Windows Installation
 
 ### Download the installer
