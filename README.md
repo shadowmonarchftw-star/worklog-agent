@@ -18,6 +18,10 @@
 ![runtime](https://img.shields.io/badge/runtime-Electron%20%2B%20Next.js-black?style=flat-square)
 ![backend](https://img.shields.io/badge/backend-none%20(127.0.0.1)-informational?style=flat-square)
 
+<br>
+
+![AI Worklog Agent running on macOS, showing the automation schedule and scheduler status](docs/screenshot.png)
+
 </div>
 
 AI Worklog Agent is a local desktop app that reads your GitHub commits and pull
