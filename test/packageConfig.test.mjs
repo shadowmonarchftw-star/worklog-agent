@@ -161,3 +161,28 @@ test("macOS builds a zip so the updater can download an update", async () => {
   // the zip too or the config above is silently ignored.
   assert.match(packageJson.scripts["dist:mac"], /--mac dmg zip/);
 });
+
+test("installer artifact names contain no spaces so update metadata matches uploads", async () => {
+  const packageJson = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+
+  // GitHub rewrites spaces to dots when a release asset is uploaded, while
+  // electron-builder writes hyphens into latest*.yml. A name containing a
+  // space therefore produces an update feed that 404s on download.
+  const names = [
+    packageJson.build.artifactName,
+    packageJson.build.mac?.artifactName,
+    packageJson.build.win?.artifactName,
+  ].filter(Boolean);
+
+  assert.ok(names.length >= 2, "expected default and per-platform artifact names");
+  for (const name of names) {
+    assert.doesNotMatch(name, /\s/, `artifactName must not contain spaces: ${name}`);
+    assert.doesNotMatch(
+      name,
+      /\$\{productName\}/,
+      `artifactName must not interpolate productName, which contains spaces: ${name}`,
+    );
+  }
+});

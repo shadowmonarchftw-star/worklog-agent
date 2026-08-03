@@ -118,6 +118,10 @@ export default function Home() {
     if (progressListener) progressListener(setUpdateProgress);
     const downloadedListener = window.worklogDesktop?.onUpdateDownloaded;
     if (downloadedListener) downloadedListener(() => setUpdateProgress({ downloaded: true }));
+    const errorListener = window.worklogDesktop?.onUpdateError;
+    if (errorListener) {
+      errorListener((info) => setUpdateProgress({ error: info?.message || "The update could not be downloaded." }));
+    }
   }, []);
 
   useEffect(() => {
@@ -783,7 +787,10 @@ export default function Home() {
       theme={theme}
       updateInfo={updateInfo}
       updateProgress={updateProgress}
-      onDownloadUpdate={() => window.worklogDesktop?.downloadUpdate()}
+      onDownloadUpdate={() => {
+        setUpdateProgress(null);
+        void window.worklogDesktop?.downloadUpdate();
+      }}
       onInstallUpdate={() => window.worklogDesktop?.installUpdate()}
       view={view}
       overlay={!wizardDismissed && !setupComplete ? <FirstRunWizard step={wizardStep} onStepChange={setWizardStep} onOpenSettings={(section) => { setWizardDismissed(true); setView("settings"); if (section === "health") void runHealthCheck(); }} onDismiss={() => { localStorage.setItem("worklog-wizard-dismissed", "1"); setWizardDismissed(true); }} /> : null}

@@ -36,7 +36,7 @@ export function AppShell({
         </div>
       </header>
 
-      {updateInfo && <div className="update-banner">{updateProgress?.downloaded ? <>Version {updateInfo.version} ready <button type="button" onClick={onInstallUpdate}>Restart to install</button></> : updateProgress?.percent != null ? <>Downloading update... {updateProgress.percent}%</> : <>Version {updateInfo.version} available <button type="button" onClick={onDownloadUpdate}>Download update</button></>}</div>}
+      {updateInfo && <div className="update-banner">{updateProgress?.error ? <>{updateProgress.error} <button type="button" onClick={onDownloadUpdate}>Try again</button></> : updateProgress?.downloaded ? <>Version {updateInfo.version} ready <button type="button" onClick={onInstallUpdate}>Restart to install</button></> : updateProgress?.percent != null ? <>Downloading update... {updateProgress.percent}%</> : <>Version {updateInfo.version} available <button type="button" onClick={onDownloadUpdate}>Download update</button></>}</div>}
       <div className="app-frame">
         <aside className="sidebar">
           <p className="nav-label">Navigation</p>

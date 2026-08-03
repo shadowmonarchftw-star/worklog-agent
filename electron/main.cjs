@@ -255,12 +255,31 @@ ipcMain.handle("local-git:inspect-repository", async (_event, repositoryPath) =>
   });
   return data.repository;
 });
+function updateFailureReason(error) {
+  const message = String(error?.message || error || "").replace(/\s+/g, " ").trim();
+  if (/status 40[34]/.test(message)) {
+    return "The update file is missing from the release. Download the new version manually.";
+  }
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network/i.test(message)) {
+    return "Could not reach the update server. Check your connection and try again.";
+  }
+  return message.slice(0, 200) || "The update could not be downloaded.";
+}
+
 // autoUpdater is only wired up when packaged, so answer plainly in dev instead of
 // rejecting into the renderer.
 ipcMain.handle("update:download", async () => {
   if (!app.isPackaged) return { ok: false, reason: "unavailable-in-development" };
-  await autoUpdater.downloadUpdate();
-  return { ok: true };
+  try {
+    await autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (error) {
+    // A rejection here reaches the renderer as an unhandled promise, so the
+    // button would appear to do nothing at all. Report it instead.
+    const reason = updateFailureReason(error);
+    mainWindow?.webContents.send("update:error", { message: reason });
+    return { ok: false, reason };
+  }
 });
 ipcMain.handle("update:install", () => {
   if (!app.isPackaged) return { ok: false, reason: "unavailable-in-development" };
@@ -278,7 +297,13 @@ if (app.isPackaged) {
   autoUpdater.autoDownload = false;
   // An "error" event with no listener is an uncaught exception on an EventEmitter,
   // which would take the whole app down on a routine update-check network failure.
-  autoUpdater.on("error", () => {});
+  // Report it to the window instead of discarding it, so a failed update is
+  // visible rather than looking like a button that does nothing.
+  autoUpdater.on("error", (error) => {
+    mainWindow?.webContents.send("update:error", {
+      message: updateFailureReason(error),
+    });
+  });
   autoUpdater.on("update-available", (info) => mainWindow?.webContents.send("update:available", info));
   autoUpdater.on("download-progress", (info) => mainWindow?.webContents.send("update:progress", { percent: Math.round(info.percent) }));
   autoUpdater.on("update-downloaded", (info) => mainWindow?.webContents.send("update:downloaded", info));
