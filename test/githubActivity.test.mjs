@@ -6,9 +6,11 @@ import {
   extractCommitAuthors,
   filterCommitsByRange,
   formatPullRequestActivity,
+  mergePullRequestGroups,
   formatRepositoryActivity,
   normalizeToken,
 } from "../lib/githubActivity.mjs";
+import { collectGithubActivity } from "../lib/githubProvider.mjs";
 import { localDayUtcRange } from "../lib/localDate.mjs";
 import { POST } from "../app/api/github/activity/route.js";
 
@@ -327,4 +329,131 @@ test("formatRepositoryActivity includes local time from commit author date", () 
   });
 
   assert.match(activity, /14:35 commit abcdef1 restore rate data/);
+});
+
+test("reviewed pull requests are labelled as review work", () => {
+  const groups = formatPullRequestActivity(
+    [
+      {
+        repository_url: "https://api.github.com/repos/owner/app",
+        number: 51,
+        title: "Rework the scheduler",
+        pull_request: { merged_at: "2026-07-23T10:00:00Z" },
+      },
+    ],
+    undefined,
+    { role: "reviewer" },
+  );
+
+  assert.deepEqual(groups["owner/app"], [
+    { number: 51, title: "Rework the scheduler", stateLabel: "reviewed PR" },
+  ]);
+});
+
+test("mergePullRequestGroups keeps authored work when a PR is both authored and reviewed", () => {
+  const authored = {
+    "owner/app": [{ number: 42, title: "Improve export", stateLabel: "merged PR" }],
+  };
+  const reviewed = {
+    "owner/app": [
+      { number: 42, title: "Improve export", stateLabel: "reviewed PR" },
+      { number: 51, title: "Rework the scheduler", stateLabel: "reviewed PR" },
+    ],
+    "owner/docs": [{ number: 7, title: "Fix typo", stateLabel: "reviewed PR" }],
+  };
+
+  assert.deepEqual(mergePullRequestGroups(authored, reviewed), {
+    "owner/app": [
+      { number: 42, title: "Improve export", stateLabel: "merged PR" },
+      { number: 51, title: "Rework the scheduler", stateLabel: "reviewed PR" },
+    ],
+    "owner/docs": [{ number: 7, title: "Fix typo", stateLabel: "reviewed PR" }],
+  });
+});
+
+test("a day of only reviews still counts as activity", () => {
+  const result = buildActivityResult({
+    date: "2026-07-23",
+    repos: ["owner/app"],
+    commitResults: [{ repo: "owner/app", commits: [] }],
+    prGroups: {
+      "owner/app": [
+        { number: 51, title: "Rework the scheduler", stateLabel: "reviewed PR" },
+      ],
+    },
+  });
+
+  assert.equal(result.commitCount, 0);
+  assert.equal(result.pullRequestCount, 1);
+  assert.match(result.activity, /reviewed PR #51 Rework the scheduler/);
+});
+
+test("collectGithubActivity searches authored and reviewed pull requests", async () => {
+  const queries = [];
+  const result = await collectGithubActivity({
+    token: "github_pat_valid",
+    repos: ["owner/app"],
+    date: "2026-07-30",
+    author: "asha",
+    fetchImpl: async (url) => {
+      const text = String(url);
+      if (text.includes("/branches")) return Response.json([{ name: "main" }]);
+      if (text.includes("/search/issues")) {
+        const query = new URL(text).searchParams.get("q");
+        queries.push(query);
+        if (query.includes("reviewed-by:asha")) {
+          return Response.json({
+            items: [{
+              repository_url: "https://api.github.com/repos/owner/app",
+              number: 51,
+              title: "Rework the scheduler",
+              updated_at: "2026-07-30T09:00:00Z",
+              pull_request: { merged_at: null },
+            }],
+          });
+        }
+        return Response.json({ items: [] });
+      }
+      return Response.json([]);
+    },
+  });
+
+  assert.equal(queries.length, 2);
+  assert.ok(queries.some((query) => query.includes("author:asha")));
+  assert.ok(queries.some((query) => query.includes("reviewed-by:asha")));
+  assert.equal(result.commitCount, 0);
+  assert.equal(result.pullRequestCount, 1);
+  assert.match(result.activity, /reviewed PR #51 Rework the scheduler/);
+});
+
+test("a failed review search does not lose the authored pull requests", async () => {
+  const result = await collectGithubActivity({
+    token: "github_pat_valid",
+    repos: ["owner/app"],
+    date: "2026-07-30",
+    author: "asha",
+    fetchImpl: async (url) => {
+      const text = String(url);
+      if (text.includes("/branches")) return Response.json([{ name: "main" }]);
+      if (text.includes("/search/issues")) {
+        const query = new URL(text).searchParams.get("q");
+        if (query.includes("reviewed-by:asha")) {
+          return new Response("rate limited", { status: 403 });
+        }
+        return Response.json({
+          items: [{
+            repository_url: "https://api.github.com/repos/owner/app",
+            number: 42,
+            title: "Improve export",
+            updated_at: "2026-07-30T09:00:00Z",
+            pull_request: { merged_at: "2026-07-30T09:30:00Z" },
+          }],
+        });
+      }
+      return Response.json([]);
+    },
+  });
+
+  assert.equal(result.pullRequestCount, 1);
+  assert.match(result.activity, /merged PR #42 Improve export/);
 });
