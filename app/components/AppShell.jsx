@@ -24,6 +24,7 @@ export function AppShell({
   onDownloadUpdate,
   updateProgress,
   onInstallUpdate,
+  onOpenUpdateDownload,
   overlay,
 }) {
   return (
@@ -36,7 +37,7 @@ export function AppShell({
         </div>
       </header>
 
-      {updateInfo && <div className="update-banner">{updateProgress?.error ? <>{updateProgress.error} <button type="button" onClick={onDownloadUpdate}>Try again</button></> : updateProgress?.downloaded ? <>Version {updateInfo.version} ready <button type="button" onClick={onInstallUpdate}>Restart to install</button></> : updateProgress?.percent != null ? <>Downloading update... {updateProgress.percent}%</> : <>Version {updateInfo.version} available <button type="button" onClick={onDownloadUpdate}>Download update</button></>}</div>}
+      {updateInfo && <div className="update-banner">{updateInfo.canInstall === false ? <>Version {updateInfo.version} available. This Mac build cannot update itself, so it must be downloaded and installed by hand. <button type="button" onClick={onOpenUpdateDownload}>Open download page</button></> : updateProgress?.error ? <>{updateProgress.error} <button type="button" onClick={onDownloadUpdate}>Try again</button></> : updateProgress?.downloaded ? <>Version {updateInfo.version} ready <button type="button" onClick={onInstallUpdate}>Restart to install</button></> : updateProgress?.percent != null ? <>Downloading update... {updateProgress.percent}%</> : <>Version {updateInfo.version} available <button type="button" onClick={onDownloadUpdate}>Download update</button></>}</div>}
       <div className="app-frame">
         <aside className="sidebar">
           <p className="nav-label">Navigation</p>

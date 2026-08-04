@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld("worklogDesktop", {
   onUpdateError: (callback) => ipcRenderer.on("update:error", (_event, info) => callback(info)),
   downloadUpdate: () => ipcRenderer.invoke("update:download"),
   installUpdate: () => ipcRenderer.invoke("update:install"),
+  openUpdateDownload: () => ipcRenderer.invoke("update:open-download"),
 });

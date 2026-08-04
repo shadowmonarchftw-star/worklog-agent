@@ -841,6 +841,7 @@ export default function Home() {
         void window.worklogDesktop?.downloadUpdate();
       }}
       onInstallUpdate={() => window.worklogDesktop?.installUpdate()}
+      onOpenUpdateDownload={() => window.worklogDesktop?.openUpdateDownload()}
       view={view}
       overlay={!wizardDismissed && !setupComplete ? <FirstRunWizard step={wizardStep} onStepChange={setWizardStep} onOpenSettings={(section) => { setWizardDismissed(true); setView("settings"); if (section === "health") void runHealthCheck(); }} onDismiss={() => { localStorage.setItem("worklog-wizard-dismissed", "1"); setWizardDismissed(true); }} /> : null}
       historyCount={history.length}

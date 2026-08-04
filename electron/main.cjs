@@ -17,6 +17,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { getServerConfig, startAppServer, waitForAppUrl } = require("./app-server.cjs");
 const { registerExternalLinkHandler } = require("./external-links.cjs");
+const { releasePageUrl, supportsInAppInstall } = require("./updatePolicy.cjs");
 const { createScheduler } = require("./scheduler.cjs");
 const { createShutdownHandler } = require("./shutdown.cjs");
 const {
@@ -255,6 +256,21 @@ ipcMain.handle("local-git:inspect-repository", async (_event, repositoryPath) =>
   });
   return data.repository;
 });
+// electron-builder resolves the update feed from this same block, so reading it
+// here keeps the download link pointed at whatever repository actually publishes
+// the release.
+const updateRepository = (() => {
+  const [publish] = [].concat(require("../package.json").build?.publish || []);
+  return { owner: publish?.owner, repo: publish?.repo };
+})();
+const updateInstallSupported = supportsInAppInstall({
+  platform: process.platform,
+  // Ad-hoc signing ("identity": "-") cannot satisfy Squirrel.Mac validation.
+  // Flip this on once the macOS build is signed with a Developer ID.
+  codeSigned: false,
+});
+let offeredUpdateVersion = null;
+
 function updateFailureReason(error) {
   const message = String(error?.message || error || "").replace(/\s+/g, " ").trim();
   if (/status 40[34]/.test(message)) {
@@ -287,6 +303,15 @@ ipcMain.handle("update:install", () => {
   return { ok: true };
 });
 
+// The URL is built here rather than accepted from the renderer, so a compromised
+// page cannot turn this into a general "open any link" capability.
+ipcMain.handle("update:open-download", async (_event) => {
+  const url = releasePageUrl({ ...updateRepository, version: offeredUpdateVersion });
+  if (!url) return { ok: false, reason: "unknown-release" };
+  await shell.openExternal(url);
+  return { ok: true, url };
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin" && !shouldKeepAlive(automationSettings)) {
     app.quit();
@@ -304,7 +329,18 @@ if (app.isPackaged) {
       message: updateFailureReason(error),
     });
   });
-  autoUpdater.on("update-available", (info) => mainWindow?.webContents.send("update:available", info));
+  autoUpdater.on("update-available", (info) => {
+    offeredUpdateVersion = info?.version || null;
+    mainWindow?.webContents.send("update:available", {
+      ...info,
+      // macOS cannot install an ad-hoc signed update in place, so the renderer
+      // offers a download link there instead of a button that always fails.
+      canInstall: updateInstallSupported,
+      downloadUrl: updateInstallSupported
+        ? null
+        : releasePageUrl({ ...updateRepository, version: info?.version }),
+    });
+  });
   autoUpdater.on("download-progress", (info) => mainWindow?.webContents.send("update:progress", { percent: Math.round(info.percent) }));
   autoUpdater.on("update-downloaded", (info) => mainWindow?.webContents.send("update:downloaded", info));
   app.whenReady().then(() => void autoUpdater.checkForUpdates().catch(() => {}));

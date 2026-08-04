@@ -169,6 +169,20 @@ For later starts, open Terminal in the `worklog-agent` folder and run:
 npm run desktop
 ```
 
+## Updating
+
+The app checks for a new release once at startup and shows a banner when one
+exists.
+
+**Windows** downloads the update in the app and installs it on restart.
+
+**macOS** cannot update itself. The banner links to the release page instead, and
+the new version has to be downloaded and installed by hand. This is not a bug in
+the update check: the macOS build is ad-hoc signed, and macOS validates a
+downloaded update against a signature requirement that is tied to the exact
+installed binary, so no later build can ever satisfy it. Signing the app with an
+Apple Developer ID would remove the limitation.
+
 ## One-Time Setup
 
 Open Settings in the app and provide:
