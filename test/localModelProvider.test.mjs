@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { generateLocalRollup, generateLocalSummary } from "../lib/localModelProvider.mjs";
+import { generateLocalRollup, generateLocalSummary, listLocalModels } from "../lib/localModelProvider.mjs";
 
 const BASE = {
   baseUrl: "http://127.0.0.1:11434/v1",
@@ -267,4 +267,55 @@ test("generateLocalRollup sends the period prompt to the local server", async ()
   assert.match(sent.messages[1].content, /Shipped the export fix/);
   assert.equal(result.summary, "Steady month.");
   assert.equal(result.model, "gemma3:4b");
+});
+
+test("listLocalModels returns sorted model ids from an OpenAI-compatible server", async () => {
+  let requested;
+  const models = await listLocalModels({
+    baseUrl: "http://127.0.0.1:11434/v1/",
+    fetchImpl: async (url) => {
+      requested = String(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ id: "qwen3:8b" }, { id: "gemma3:4b" }] }),
+        text: async () => "",
+      };
+    },
+  });
+
+  assert.equal(requested, "http://127.0.0.1:11434/v1/models");
+  assert.deepEqual(models, ["gemma3:4b", "qwen3:8b"]);
+});
+
+test("listLocalModels reports an unreachable server as a provider error", async () => {
+  await assert.rejects(
+    () => listLocalModels({
+      baseUrl: "http://127.0.0.1:11434/v1",
+      fetchImpl: async () => { throw new Error("ECONNREFUSED"); },
+    }),
+    (error) => error.category === "local_model" && /Cannot reach/.test(error.safeMessage),
+  );
+});
+
+test("listLocalModels returns nothing when the server has no model list", async () => {
+  const models = await listLocalModels({
+    baseUrl: "http://127.0.0.1:11434/v1",
+    fetchImpl: async () => ({ ok: false, status: 404, text: async () => "" }),
+  });
+
+  assert.deepEqual(models, []);
+});
+
+test("listLocalModels does not follow redirects to another host", async () => {
+  let options;
+  await listLocalModels({
+    baseUrl: "http://127.0.0.1:11434/v1",
+    fetchImpl: async (_url, init) => {
+      options = init;
+      return { ok: false, status: 302, text: async () => "" };
+    },
+  });
+
+  assert.equal(options.redirect, "manual");
 });

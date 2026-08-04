@@ -122,6 +122,38 @@ function CredentialsSection({
   summaryProvider,
 }) {
   const useLocalModel = summaryProvider === "local";
+  const [models, setModels] = useState([]);
+  const [modelStatus, setModelStatus] = useState("");
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  async function loadModels() {
+    setLoadingModels(true);
+    setModelStatus("");
+    try {
+      const response = await fetch("/api/local/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: localModelBaseUrl, apiKey: localModelApiKey }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setModels([]);
+        setModelStatus(data.error || "Could not read the model list.");
+      } else if (!data.models?.length) {
+        setModels([]);
+        setModelStatus("This server does not list its models. Type the name instead.");
+      } else {
+        setModels(data.models);
+        setModelStatus(`${data.models.length} model${data.models.length === 1 ? "" : "s"} available.`);
+      }
+    } catch {
+      setModels([]);
+      setModelStatus("Could not read the model list.");
+    } finally {
+      setLoadingModels(false);
+    }
+  }
+
   return (
     <SettingsPanel title="Credentials" description="Stored locally and encrypted on desktop. Never included in summaries.">
       {activitySource === "github" && (
@@ -176,15 +208,30 @@ function CredentialsSection({
             />
           </SettingsField>
           <SettingsField label="Model name" hint="The tag your server knows, for example gemma3:4b.">
-            <input
-              type="text"
-              value={localModelName}
-              placeholder="gemma3:4b"
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => onLocalModelNameChange(event.target.value)}
-              onBlur={() => onSave({ localModelName })}
-            />
+            <div className="model-picker">
+              <input
+                type="text"
+                list="local-model-options"
+                value={localModelName}
+                placeholder="gemma3:4b"
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => onLocalModelNameChange(event.target.value)}
+                onBlur={() => onSave({ localModelName })}
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={loadingModels}
+                onClick={loadModels}
+              >
+                <RefreshCw size={13} /> {loadingModels ? "Loading" : "Load models"}
+              </button>
+            </div>
+            <datalist id="local-model-options">
+              {models.map((name) => <option key={name} value={name} />)}
+            </datalist>
+            {modelStatus && <small className="model-picker-status">{modelStatus}</small>}
           </SettingsField>
           <SettingsField
             label="API key"

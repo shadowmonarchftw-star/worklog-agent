@@ -37,6 +37,8 @@ local settings.
 
 - Pulls a day's activity from the GitHub API, or from repositories on your own
   machine using local `git`.
+- Counts pull requests you reviewed as well as ones you opened, so a day spent
+  on review does not look empty.
 - Turns that activity into a short daily summary with Gemini, or with a
   local model so nothing leaves your machine.
 - Keeps every generated summary in local history so you can review or redo a
@@ -215,6 +217,10 @@ Run **Setup check** to confirm the server answers.
 
 ### Choosing a model
 
+Under **Settings > Credentials**, click **Load models** to read the list from
+your server and pick the name from the field's suggestions. Servers that do not
+publish a model list say so; typing the tag by hand still works.
+
 `llama3.2:3b` (2 GB) is the recommended starting point and the practical floor
 for this task. Smaller models such as `gemma3:1b` are not usable here: they
 ignore the requested style and produce garbled or empty summaries.
@@ -346,6 +352,18 @@ saved for that period into one update, then offers it for copying.
 Because the rollup is built from summaries the app already has, it costs one
 model call regardless of how long the period is, and it works offline with a
 local model.
+
+## Pull Request Activity
+
+Alongside commits, the app searches GitHub for pull requests you opened and
+pull requests you reviewed on the selected date, and labels them separately in
+the summary. A day with no commits but a morning of review still produces a
+worklog instead of being recorded as a day with no activity.
+
+Both searches are limited to the repositories you selected, so review work in
+repositories you did not pick is left out. A PR you both opened and reviewed is
+counted once, as your own. If GitHub rate-limits the review search, the day
+still uses the pull requests you opened rather than failing.
 
 ## Filtering Noisy Commits
 
