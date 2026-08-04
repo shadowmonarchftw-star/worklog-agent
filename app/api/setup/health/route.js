@@ -3,6 +3,8 @@ import { unreadableCredentials } from "../../../../lib/secureSettings.mjs";
 import { normalizeToken } from "../../../../lib/githubActivity.mjs";
 import { preflightLocalGit } from "../../../../lib/localGitProvider.mjs";
 import { generateGeminiSummary } from "../../../../lib/geminiProvider.mjs";
+import { generateLocalSummary } from "../../../../lib/localModelProvider.mjs";
+import { summaryProviderName } from "../../../../lib/worklogService.mjs";
 import { inspectGoogleSheet, readGoogleSheetRow } from "../../../../lib/googleSheetsProvider.mjs";
 import { localDateAt } from "../../../../lib/localDate.mjs";
 
@@ -41,18 +43,37 @@ async function checkLocalGit(settings) {
   }
 }
 
-async function checkGemini(settings) {
-  if (!settings.geminiApiKey?.trim()) return check("gemini", "Gemini", "fail", "Gemini API key missing.");
+async function checkSummaryModel(settings) {
+  const local = summaryProviderName(settings) === "local";
+  const label = local ? "Local model" : "Gemini";
+  if (local && !settings.localModelName?.trim()) {
+    return check("summary-model", label, "fail", "Local model name missing.");
+  }
+  if (!local && !settings.geminiApiKey?.trim()) {
+    return check("summary-model", label, "fail", "Gemini API key missing.");
+  }
+  const probe = {
+    workDate: localDateAt(),
+    style: "sheet-cell",
+    activity: "setup check: verify summary generation",
+  };
   try {
-    await generateGeminiSummary({
-      apiKey: settings.geminiApiKey,
-      workDate: localDateAt(),
-      style: "sheet-cell",
-      activity: "setup check: verify summary generation",
-    });
-    return check("gemini", "Gemini", "pass", "Summary generation works.");
+    const result = local
+      ? await generateLocalSummary({
+        ...probe,
+        baseUrl: settings.localModelBaseUrl,
+        model: settings.localModelName,
+        apiKey: settings.localModelApiKey,
+      })
+      : await generateGeminiSummary({ ...probe, apiKey: settings.geminiApiKey });
+    return check("summary-model", label, "pass", `Summary generation works (${result.model}).`);
   } catch (error) {
-    return check("gemini", "Gemini", "fail", error.safeMessage || error.message || "Gemini request failed.");
+    return check(
+      "summary-model",
+      label,
+      "fail",
+      error.safeMessage || error.message || "Summary generation failed.",
+    );
   }
 }
 
@@ -88,7 +109,7 @@ export async function GET() {
     Promise.resolve(checkCredentials(settings, tokens)),
     Promise.resolve(check("source", "Activity source", "pass", source === "local" ? "Local Git selected." : "GitHub selected.")),
     source === "local" ? checkLocalGit(settings) : checkGithub(settings),
-    checkGemini(settings),
+    checkSummaryModel(settings),
     checkGoogle(settings, tokens),
   ]);
   return Response.json({ checks, ranAt: new Date().toISOString() });

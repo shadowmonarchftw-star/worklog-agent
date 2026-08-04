@@ -18,12 +18,14 @@ import {
   ValidationError,
 } from "../../../../lib/automationHttp.mjs";
 import { geminiProvider } from "../../../../lib/geminiProvider.mjs";
+import { localModelProvider } from "../../../../lib/localModelProvider.mjs";
 import { githubProvider } from "../../../../lib/githubProvider.mjs";
 import { localGitProvider } from "../../../../lib/localGitProvider.mjs";
 import { googleSheetsProvider } from "../../../../lib/googleSheetsProvider.mjs";
 import {
   getAppDb,
   getSetting,
+  listSummaryExamples,
   saveHistoryEntry,
   setSetting,
 } from "../../../../lib/localDb.mjs";
@@ -62,6 +64,7 @@ function persistence(db, settings) {
       };
       return saveHistoryEntry(db, saved);
     },
+    summaryExamples: (input) => listSummaryExamples(db, input),
     checkpointHistory: (input) => checkpointAutomationHistory(db, input),
     checkpointIntent: (input) => checkpointAutomationIntent(db, input),
     checkpointPreWrite: (input) => checkpointAutomationPreWrite(db, input),
@@ -137,6 +140,7 @@ export async function loadAutomationInput(body = {}) {
       ? localGitProvider
       : githubProvider,
     gemini: geminiProvider,
+    localModel: localModelProvider,
     sheets: {
       ...googleSheetsProvider,
       readRow: (input) => googleSheetsProvider.readRow({

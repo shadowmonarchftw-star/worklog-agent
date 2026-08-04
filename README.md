@@ -7,6 +7,7 @@
 
 [What it does](#what-it-does) ·
 [Local by design](#local-by-design) ·
+[Local model](#using-a-local-model) ·
 [Install](#macos-installation) ·
 [Setup](#one-time-setup) ·
 [Daily use](#daily-use) ·
@@ -25,19 +26,25 @@
 </div>
 
 AI Worklog Agent is a local desktop app that reads your GitHub commits and pull
-requests, generates a daily work summary with Gemini, saves local history in
-SQLite, and can write the result to a Google Sheet.
+requests, generates a daily work summary with Gemini or a model running on your
+own machine, saves local history in SQLite, and can write the result to a
+Google Sheet.
 
-Each developer uses their own GitHub token, Gemini API key, GitHub author, and
+Each developer uses their own GitHub token, summary model, GitHub author, and
 local settings.
 
 ## What it does
 
 - Pulls a day's activity from the GitHub API, or from repositories on your own
   machine using local `git`.
-- Turns that activity into a short daily summary with Gemini.
+- Turns that activity into a short daily summary with Gemini, or with a
+  local model so nothing leaves your machine.
 - Keeps every generated summary in local history so you can review or redo a
   day.
+- Learns your writing style from the summaries you rewrite, so each day sounds
+  more like you and less like a model.
+- Rolls a week or a month of saved summaries into one update for a standup,
+  sprint review, or self-review.
 - Optionally upserts the day into a Google Sheet, matching the date in column
   A and writing only the date, summary, and hours columns.
 - Can run on a schedule from the tray and catch up on days it missed.
@@ -167,8 +174,10 @@ Open Settings in the app and provide:
 1. **GitHub fine-grained token** - create one in GitHub under Settings,
    Developer settings, Personal access tokens, Fine-grained tokens. Give it
    read access to the repositories and repository metadata you want to use.
-2. **Gemini API key** - create one in
-   [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. **Summary model** - either a **Gemini API key** from
+   [Google AI Studio](https://aistudio.google.com/app/apikey), or a
+   [local model](#using-a-local-model) that keeps your commit messages on your
+   own machine.
 3. **GitHub commit author** - select your own GitHub username so the app only
    reads your commits from shared repositories.
 4. **Repositories** - load and select the repositories used for your worklog.
@@ -176,6 +185,55 @@ Open Settings in the app and provide:
 
 Settings and credentials are stored only in the app's local SQLite database on
 that computer. Do not share tokens or commit them to Git.
+
+## Using a Local Model
+
+By default the app sends your activity to Gemini to write the summary. If your
+commit messages cannot leave your machine, point it at a local model instead.
+Nothing is sent anywhere: the app talks to a server running on your own
+computer.
+
+Any OpenAI-compatible server works — [Ollama](https://ollama.com), LM Studio,
+llama.cpp, LiteLLM, or vLLM. Using Ollama:
+
+```bash
+brew install ollama          # or download from ollama.com
+brew services start ollama   # keeps it running after you close the terminal
+ollama pull llama3.2:3b
+```
+
+Then in **Settings > Credentials**, switch **Summary model** to **Local model**
+and set:
+
+| Field | Value |
+| --- | --- |
+| Server URL | `http://127.0.0.1:11434/v1` |
+| Model name | `llama3.2:3b` |
+| API key | leave blank — Ollama and LM Studio need none |
+
+Run **Setup check** to confirm the server answers.
+
+### Choosing a model
+
+`llama3.2:3b` (2 GB) is the recommended starting point and the practical floor
+for this task. Smaller models such as `gemma3:1b` are not usable here: they
+ignore the requested style and produce garbled or empty summaries.
+
+Larger models write better. If you have the memory, a 7B or 12B model such as
+`gemma3:12b` (8 GB) is a clear step up.
+
+Two things to expect from small local models:
+
+- **Occasional factual drift.** A 3B model may state a version number or detail
+  that is not in your activity. Gemini does this less. If a worklog is read by
+  other people, spot-check it or use Gemini.
+- **A cold first run.** Ollama unloads an idle model after a few minutes, so a
+  scheduled run always reloads it first. This is normal and allowed for.
+
+If the local server is not running when an automatic worklog is due, that day
+fails with a clear message and is retried. The app never falls back to Gemini
+on its own — choosing a local model is treated as a decision about privacy, not
+a preference.
 
 ## Google Sheets Setup
 
@@ -245,6 +303,49 @@ app from writing it at all.
 The date in the date column must use `M/D/YYYY`, for example `7/31/2026`. The
 sheet can have additional headers, formatting, and formulas. The configured
 sheet tab name must exactly match the tab shown at the bottom of Google Sheets.
+
+## Learning Your Writing Style
+
+Edit a generated summary and click away from the box. The app keeps both the
+generated text and your rewrite, and feeds your recent rewrites into later
+prompts as examples of how you want to sound. Nothing to turn on, and no extra
+step — editing is the whole interaction.
+
+A few details worth knowing:
+
+- Only summaries you actually changed count. Leaving one untouched signals
+  nothing, so it is not used as an example.
+- Examples are matched to the summary style in use. A bullet-point rewrite is
+  never used to steer a concise summary.
+- The three most recent rewrites are used. Older ones age out on their own.
+- Your rewrites guide wording only. The model is told not to reuse their
+  content, so yesterday's work never leaks into today's summary.
+- Regenerating a day replaces both the summary and your rewrite for that day,
+  since the rewrite belonged to the older text.
+- Scheduled runs use this too, so automatic worklogs sound the same as the ones
+  you write by hand.
+
+For a standing instruction that applies to every summary — mentioning ticket
+numbers, say — use **Settings > Output > Summary preferences** instead. Rewrites teach
+voice; the preference states a rule.
+
+## Weekly and Monthly Rollups
+
+Open **History**, pick **Week** or **Month**, choose any date inside the period,
+and click **Generate rollup**. The app combines the daily summaries it already
+saved for that period into one update, then offers it for copying.
+
+- A week runs Monday to Sunday. A month runs from the first to the last day.
+- Days with no recorded work are skipped, not guessed at.
+- Where you rewrote a day by hand, the rollup uses your version.
+- Rollups use the same model you picked for daily summaries, so a local model
+  keeps the work on your machine here too.
+- A rollup is not saved to history and is never written to the sheet. It covers
+  a period rather than a dated row, and the sheet is one row per day.
+
+Because the rollup is built from summaries the app already has, it costs one
+model call regardless of how long the period is, and it works offline with a
+local model.
 
 ## Filtering Noisy Commits
 

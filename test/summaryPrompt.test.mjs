@@ -103,3 +103,113 @@ test("buildSummaryPrompt ignores legacy developer names", () => {
 
   assert.doesNotMatch(prompt.user, /Asha|Developer:/);
 });
+
+test("strips a chat preamble that smaller models add before the summary", () => {
+  assert.equal(
+    cleanSummaryText("Okay, here's a daily work log:\nShipped the scheduler fix."),
+    "Shipped the scheduler fix.",
+  );
+  assert.equal(
+    cleanSummaryText("Sure! Here is the summary:\n\nFixed the update feed."),
+    "Fixed the update feed.",
+  );
+});
+
+test("unwraps a fenced code block around the summary", () => {
+  assert.equal(
+    cleanSummaryText("```cell\nShipped the scheduler fix.\n```"),
+    "Shipped the scheduler fix.",
+  );
+  assert.equal(
+    cleanSummaryText("Here is the summary:\n```\nShipped the fix.\n```"),
+    "Shipped the fix.",
+  );
+});
+
+test("drops a trailing offer to revise the summary", () => {
+  assert.equal(
+    cleanSummaryText("Shipped the scheduler fix.\n\nWould you like me to revise it further?"),
+    "Shipped the scheduler fix.",
+  );
+  assert.equal(
+    cleanSummaryText("Shipped the fix.\nLet me know if you want more detail!"),
+    "Shipped the fix.",
+  );
+});
+
+test("leaves a well-formed summary untouched", () => {
+  const good = "Fixed the scheduler guard so a scheduled run is no longer skipped; "
+    + "corrected the update metadata that made downloads fail.";
+  assert.equal(cleanSummaryText(good), good);
+});
+
+test("does not mistake a real sentence for a preamble", () => {
+  const starts = "Here the automation writes only columns A, B and D.";
+  assert.equal(cleanSummaryText(starts), starts);
+  const question = "Reviewed whether the retry budget should count no_activity attempts?";
+  assert.equal(cleanSummaryText(question), question);
+});
+
+test("preserves bullets while still removing a preamble", () => {
+  assert.equal(
+    cleanSummaryText("Okay, here's the list:\n- Fixed the guard\n- Updated docs", { preserveBullets: true }),
+    "- Fixed the guard\n- Updated docs",
+  );
+});
+
+test("a curly apostrophe in the preamble is still recognised", () => {
+  assert.equal(
+    cleanSummaryText("Okay, here’s the standup summary:\nShipped the fix."),
+    "Shipped the fix.",
+  );
+});
+
+test("buildSummaryPrompt teaches voice from summaries the user rewrote", () => {
+  const prompt = buildSummaryPrompt({
+    workDate: "2026-08-04",
+    style: "concise",
+    activity: "commit abc123 add login form",
+    examples: [
+      "Shipped the login form and cleaned up the retry path.",
+      "Fixed invoice totals; started the export job.",
+    ],
+  });
+
+  assert.match(prompt.user, /rewrote/i);
+  assert.match(prompt.user, /Shipped the login form/);
+  assert.match(prompt.user, /Fixed invoice totals/);
+  // The examples are voice guidance, never source material for the summary.
+  assert.match(prompt.user, /Do not copy their content/i);
+});
+
+test("buildSummaryPrompt omits the example section when there are no examples", () => {
+  const withoutExamples = buildSummaryPrompt({
+    workDate: "2026-08-04",
+    style: "concise",
+    activity: "commit abc123 add login form",
+  });
+  const withBlankExamples = buildSummaryPrompt({
+    workDate: "2026-08-04",
+    style: "concise",
+    activity: "commit abc123 add login form",
+    examples: ["", "   ", null],
+  });
+
+  assert.doesNotMatch(withoutExamples.user, /rewrote/i);
+  assert.doesNotMatch(withBlankExamples.user, /rewrote/i);
+});
+
+test("buildSummaryPrompt bounds example count and length so small local models stay on task", () => {
+  const prompt = buildSummaryPrompt({
+    workDate: "2026-08-04",
+    style: "concise",
+    activity: "commit abc123 add login form",
+    examples: ["one", "two", "three", "four", "five", "x".repeat(900)],
+  });
+
+  assert.match(prompt.user, /one/);
+  assert.match(prompt.user, /three/);
+  assert.doesNotMatch(prompt.user, /\bfour\b/);
+  assert.doesNotMatch(prompt.user, /"x".repeat/);
+  assert.equal(prompt.user.includes("x".repeat(500)), false);
+});

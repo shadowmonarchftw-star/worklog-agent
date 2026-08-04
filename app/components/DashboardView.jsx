@@ -40,6 +40,7 @@ export function DashboardView({
   onOpenSettings,
   onRestoreHistory,
   onSummaryChange,
+  onSummaryCommit,
   onWriteSummary,
   rangeEnabled,
   rangeStart,
@@ -168,7 +169,7 @@ export function DashboardView({
                   </div>
                 )}
                 {summary && loading !== "summary" && (
-                  <textarea className="summary-editor" aria-label="Worklog summary" value={summary} onChange={(event) => onSummaryChange(event.target.value)} />
+                  <textarea className="summary-editor" aria-label="Worklog summary" value={summary} onChange={(event) => onSummaryChange(event.target.value)} onBlur={() => onSummaryCommit?.()} />
                 )}
 
                 {(summary || sheetStatus) && (

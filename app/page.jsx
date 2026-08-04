@@ -20,6 +20,10 @@ import {
 
 export default function Home() {
   const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [summaryProvider, setSummaryProvider] = useState("gemini");
+  const [localModelBaseUrl, setLocalModelBaseUrl] = useState("http://127.0.0.1:11434/v1");
+  const [localModelName, setLocalModelName] = useState("");
+  const [localModelApiKey, setLocalModelApiKey] = useState("");
   const [githubToken, setGithubToken] = useState("");
   const [githubAuthor, setGithubAuthor] = useState("");
   const [commitExclusions, setCommitExclusions] = useState("");
@@ -85,7 +89,10 @@ export default function Home() {
   const sourceComplete = activitySource === "local"
     ? localRepositories.length > 0
     : githubToken && githubAuthor && selectedRepos.length;
-  const setupComplete = Boolean(geminiApiKey && sourceComplete);
+  const summaryModelComplete = summaryProvider === "local"
+    ? Boolean(localModelName.trim())
+    : Boolean(geminiApiKey);
+  const setupComplete = Boolean(summaryModelComplete && sourceComplete);
   const desktopAvailable = typeof window !== "undefined" &&
     Boolean(window.worklogDesktop?.runAutomation);
   const automationReady = Boolean(
@@ -94,7 +101,7 @@ export default function Home() {
   const automationUnavailableMessage = !desktopAvailable
     ? "Desktop app required to test automation."
     : !setupComplete
-      ? `Complete ${activitySource === "local" ? "Local Git" : "GitHub"} and Gemini setup before enabling automation.`
+      ? `Complete ${activitySource === "local" ? "Local Git" : "GitHub"} and ${summaryProvider === "local" ? "local model" : "Gemini"} setup before enabling automation.`
       : !googleConnected || !googleSheetLink
         ? "Connect Google Sheets before enabling automation."
         : "";
@@ -135,6 +142,10 @@ export default function Home() {
       if (settingsResponse.ok) {
         const { settings } = await settingsResponse.json();
         setGeminiApiKey(settings.geminiApiKey || "");
+        setSummaryProvider(settings.summaryProvider === "local" ? "local" : "gemini");
+        setLocalModelBaseUrl(settings.localModelBaseUrl || "http://127.0.0.1:11434/v1");
+        setLocalModelName(settings.localModelName || "");
+        setLocalModelApiKey(settings.localModelApiKey || "");
         setGithubToken(settings.githubToken || "");
         setGithubAuthor(settings.githubAuthor || "");
         setCommitExclusions(settings.commitExclusions || "");
@@ -257,6 +268,10 @@ export default function Home() {
       body: JSON.stringify({
         settings: {
           geminiApiKey,
+          summaryProvider,
+          localModelBaseUrl,
+          localModelName,
+          localModelApiKey,
           githubToken,
           githubAuthor,
           googleSheetLink,
@@ -500,6 +515,10 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         geminiApiKey,
+        summaryProvider,
+        localModelBaseUrl,
+        localModelName,
+        localModelApiKey,
         workDate,
         style,
         activity: activityResult.activity,
@@ -559,6 +578,25 @@ export default function Home() {
     return savedHistory;
   }
 
+  // A hand-edited summary is the only direct evidence of how this user wants to
+  // sound, so it is stored next to the generated text rather than replacing it:
+  // the pair is what later prompts learn from.
+  async function commitSummaryEdit() {
+    const entry = history.find((item) => item.workDate === workDate);
+    if (!entry) return;
+    const edited = summary.trim();
+    if (!edited || edited === entry.summary.trim()) return;
+    if (edited === (entry.editedSummary || "").trim()) return;
+    const response = await fetch("/api/local/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entry: { ...entry, editedSummary: edited } }),
+    });
+    if (!response.ok) return;
+    const { history: savedHistory } = await response.json();
+    setHistory(savedHistory);
+  }
+
   async function generateTodayWorklog() {
     if (rangeEnabled) return generateDateRange();
     const result = await fetchGithubActivity();
@@ -585,7 +623,7 @@ export default function Home() {
       const activityData = await activityResponse.json();
       if (!activityResponse.ok) { setError(activityData.error || `Could not fetch ${date}.`); break; }
       if (!hasWorkActivity(activityData)) continue;
-      const summaryResponse = await fetch("/api/generate-summary", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ geminiApiKey, workDate: date, style, preference: summaryPreference, activity: activityData.activity }) });
+      const summaryResponse = await fetch("/api/generate-summary", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ geminiApiKey, summaryProvider, localModelBaseUrl, localModelName, localModelApiKey, workDate: date, style, preference: summaryPreference, activity: activityData.activity }) });
       const summaryData = await summaryResponse.json();
       if (!summaryResponse.ok) { setError(summaryData.error || `Could not summarize ${date}.`); break; }
       drafts.push({ date, summary: summaryData.summary, selected: true });
@@ -680,7 +718,7 @@ export default function Home() {
     setStyle(entry.style);
     setSelectedRepos(entry.repos || []);
     setActivity(entry.activity);
-    setSummary(entry.summary);
+    setSummary(entry.editedSummary || entry.summary);
     setCommitCount(0);
     setPullRequestCount(0);
     setShowActivity(false);
@@ -723,6 +761,17 @@ export default function Home() {
     defaultHours,
     sheetMapping,
     geminiApiKey,
+    summaryProvider,
+    localModelBaseUrl,
+    localModelName,
+    localModelApiKey,
+    onSummaryProviderChange: (value) => {
+      setSummaryProvider(value);
+      void saveSettings({ summaryProvider: value });
+    },
+    onLocalModelBaseUrlChange: setLocalModelBaseUrl,
+    onLocalModelNameChange: setLocalModelName,
+    onLocalModelApiKeyChange: setLocalModelApiKey,
     githubAuthor,
     commitExclusions,
     githubAuthors,
@@ -808,6 +857,7 @@ export default function Home() {
           loading={loading}
           onCopy={() => navigator.clipboard.writeText(summary)}
           onSummaryChange={setSummary}
+          onSummaryCommit={commitSummaryEdit}
           onWriteSummary={() => writeSummaryToSheet(summary)}
           rangeEnabled={rangeEnabled}
           rangeStart={rangeStart}

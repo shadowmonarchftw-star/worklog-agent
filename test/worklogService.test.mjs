@@ -596,3 +596,81 @@ test("cleanup failure after successful recovery returns a serializable safe warn
   assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
   assert.equal(JSON.stringify(result).includes("maintenance-secret"), false);
 });
+
+test("the local summary provider is used and receives its own credentials", async () => {
+  let seen;
+  const h = harness({
+    settings: {
+      ...settings,
+      summaryProvider: "local",
+      geminiApiKey: "",
+      localModelBaseUrl: "http://127.0.0.1:11434/v1",
+      localModelName: "gemma3:4b",
+      localModelApiKey: "proxy-key",
+    },
+  });
+  h.args.providers.localModel = {
+    generateSummary: async (input) => {
+      seen = input;
+      h.calls.push("local-model");
+      return { summary: intended.summary, model: "gemma3:4b" };
+    },
+  };
+
+  await executeWorklog(h.args);
+
+  assert.ok(h.calls.includes("local-model"));
+  assert.ok(!h.calls.includes("gemini"));
+  assert.equal(seen.model, "gemma3:4b");
+  assert.equal(seen.baseUrl, "http://127.0.0.1:11434/v1");
+  assert.equal(seen.apiKey, "proxy-key");
+  assert.equal(seen.apiKey === undefined, false);
+  assert.equal(seen.workDate, "2026-07-30");
+});
+
+test("the local provider requires a model name rather than a Gemini key", async () => {
+  const missingModel = harness({
+    settings: { ...settings, summaryProvider: "local", geminiApiKey: "", localModelName: "" },
+  });
+  await assert.rejects(
+    () => executeWorklog(missingModel.args),
+    (error) => error instanceof TypeError && /Local model name/.test(error.message),
+  );
+  assert.deepEqual(missingModel.calls, []);
+
+  // A missing Gemini key must not block a run that never touches Gemini.
+  const noGeminiKey = harness({
+    settings: { ...settings, summaryProvider: "local", geminiApiKey: "", localModelName: "gemma3:4b" },
+  });
+  noGeminiKey.args.providers.localModel = {
+    generateSummary: async () => ({ summary: intended.summary, model: "gemma3:4b" }),
+  };
+  await executeWorklog(noGeminiKey.args);
+  assert.ok(noGeminiKey.calls.includes("complete"));
+});
+
+test("scheduled runs reuse the user's preference and past rewrites", async () => {
+  let received = null;
+  const h = harness({
+    settings: { ...settings, summaryPreference: "Mention the ticket number." },
+  });
+  h.args.store.summaryExamples = async ({ style }) => {
+    assert.equal(style, "sheet-cell");
+    return ["Shipped export fixes; ticket ABC-1."];
+  };
+  h.args.providers.gemini.generateSummary = async (input) => {
+    received = input;
+    return { summary: intended.summary, model: "gemini" };
+  };
+
+  await executeWorklog(h.args);
+
+  assert.equal(received.preference, "Mention the ticket number.");
+  assert.deepEqual(received.examples, ["Shipped export fixes; ticket ABC-1."]);
+});
+
+test("a store without example support still completes a run", async () => {
+  const h = harness();
+  await executeWorklog(h.args);
+  assert.ok(h.calls.includes("complete"));
+});

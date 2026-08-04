@@ -109,10 +109,19 @@ function CredentialsSection({
   activitySource,
   geminiApiKey,
   githubToken,
+  localModelApiKey,
+  localModelBaseUrl,
+  localModelName,
   onGeminiApiKeyChange,
   onGithubTokenChange,
+  onLocalModelApiKeyChange,
+  onLocalModelBaseUrlChange,
+  onLocalModelNameChange,
   onSave,
+  onSummaryProviderChange,
+  summaryProvider,
 }) {
+  const useLocalModel = summaryProvider === "local";
   return (
     <SettingsPanel title="Credentials" description="Stored locally and encrypted on desktop. Never included in summaries.">
       {activitySource === "github" && (
@@ -127,16 +136,82 @@ function CredentialsSection({
         />
       </SettingsField>
       )}
-      <SettingsField label="Gemini API key" hint="Used only when generating a worklog summary.">
-        <input
-          type="password"
-          value={geminiApiKey}
-          placeholder="Paste key from Google AI Studio"
-          autoComplete="off"
-          onChange={(event) => onGeminiApiKeyChange(event.target.value)}
-          onBlur={() => onSave({ geminiApiKey })}
-        />
+      <SettingsField
+        label="Summary model"
+        hint="A local model keeps your commit messages on this machine."
+      >
+        <div className="segmented" role="group" aria-label="Summary model">
+          <button
+            type="button"
+            className={useLocalModel ? "" : "active"}
+            aria-pressed={!useLocalModel}
+            onClick={() => onSummaryProviderChange("gemini")}
+          >
+            Gemini
+          </button>
+          <button
+            type="button"
+            className={useLocalModel ? "active" : ""}
+            aria-pressed={useLocalModel}
+            onClick={() => onSummaryProviderChange("local")}
+          >
+            Local model
+          </button>
+        </div>
       </SettingsField>
+      {useLocalModel ? (
+        <>
+          <SettingsField
+            label="Server URL"
+            hint="Any OpenAI-compatible server: Ollama, LM Studio, llama.cpp, LiteLLM."
+          >
+            <input
+              type="text"
+              value={localModelBaseUrl}
+              placeholder="http://127.0.0.1:11434/v1"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => onLocalModelBaseUrlChange(event.target.value)}
+              onBlur={() => onSave({ localModelBaseUrl })}
+            />
+          </SettingsField>
+          <SettingsField label="Model name" hint="The tag your server knows, for example gemma3:4b.">
+            <input
+              type="text"
+              value={localModelName}
+              placeholder="gemma3:4b"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => onLocalModelNameChange(event.target.value)}
+              onBlur={() => onSave({ localModelName })}
+            />
+          </SettingsField>
+          <SettingsField
+            label="API key"
+            hint="Optional. Ollama and LM Studio need none; a proxy such as LiteLLM does."
+          >
+            <input
+              type="password"
+              value={localModelApiKey}
+              placeholder="Leave blank for Ollama"
+              autoComplete="off"
+              onChange={(event) => onLocalModelApiKeyChange(event.target.value)}
+              onBlur={() => onSave({ localModelApiKey })}
+            />
+          </SettingsField>
+        </>
+      ) : (
+        <SettingsField label="Gemini API key" hint="Used only when generating a worklog summary.">
+          <input
+            type="password"
+            value={geminiApiKey}
+            placeholder="Paste key from Google AI Studio"
+            autoComplete="off"
+            onChange={(event) => onGeminiApiKeyChange(event.target.value)}
+            onBlur={() => onSave({ geminiApiKey })}
+          />
+        </SettingsField>
+      )}
     </SettingsPanel>
   );
 }

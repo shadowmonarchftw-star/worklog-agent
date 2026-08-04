@@ -884,6 +884,21 @@ input[type="date"] {
 .chart-bar { width: min(24px, 100%); min-height: 8px; position: relative; background: var(--text-dim); border-radius: 3px 3px 0 0; }
 .chart-bar i { display: block; position: absolute; inset: auto 0 0; background: var(--accent); border-radius: 3px 3px 0 0; }
 .chart-legend { display: block; margin-top: 10px; color: var(--muted); font-size: 9px; }
+.rollup-panel { margin-bottom: 16px; padding: 14px; border: 1px solid var(--border); background: var(--panel-2); }
+.rollup-panel .panel-eyebrow { display: flex; align-items: center; gap: 6px; }
+.rollup-hint { margin: 8px 0 12px; color: var(--text-dim); font-size: 10px; line-height: 1.5; }
+.rollup-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.rollup-periods { display: flex; border: 1px solid var(--border); }
+.rollup-periods button { padding: 7px 14px; border: 0; background: transparent; color: var(--text-dim); font: inherit; font-size: 10px; font-weight: 700; }
+.rollup-periods button + button { border-left: 1px solid var(--border); }
+.rollup-periods button.active { background: var(--accent); color: var(--accent-text); }
+.rollup-controls input[type="date"] { padding: 6px 10px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 10px; }
+.rollup-status { margin-top: 10px; color: var(--text-dim); font-size: 10px; }
+.rollup-result { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.rollup-result-meta { display: flex; gap: 12px; color: var(--muted); font-size: 9px; }
+.rollup-result .summary-editor { width: 100%; min-height: 110px; }
+.rollup-result .secondary-button { display: flex; align-items: center; gap: 6px; }
+
 .undo-banner { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--accent); color: var(--text); font-size: 11px; }
 .undo-banner button { border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 700; }
 .automation-advice { display: block; margin-top: 5px; color: var(--text-dim); font-size: 10px; font-weight: 400; line-height: 1.5; }
@@ -1514,4 +1529,31 @@ input[type="date"] {
     width: auto;
     flex: none;
   }
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 4px;
+}
+
+.segmented button {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.segmented button.active {
+  border-color: var(--border);
+  background: var(--panel-2);
+  color: var(--text);
 }

@@ -9,6 +9,7 @@ import {
   createLocalDb,
   getSetting,
   listHistory,
+  listSummaryExamples,
   saveHistoryEntry,
   setSetting,
 } from "../lib/localDb.mjs";
@@ -313,4 +314,110 @@ test("legacy automation schema upgrade archives every populated row", () => {
     0,
   );
   assert.deepEqual(upgraded.pragma("foreign_key_check"), []);
+});
+
+test("history keeps the generated summary and the user's rewrite side by side", () => {
+  const db = tempDb();
+
+  saveHistoryEntry(db, {
+    id: "2026-08-04-1",
+    developerName: "asha",
+    workDate: "2026-08-04",
+    style: "concise",
+    repos: ["acme/api"],
+    activity: "commit abc123 add login form",
+    summary: "The developer added a login form to the api repository.",
+    createdAt: "2026-08-04T10:00:00.000Z",
+  });
+
+  const saved = saveHistoryEntry(db, {
+    id: "2026-08-04-1",
+    developerName: "asha",
+    workDate: "2026-08-04",
+    style: "concise",
+    repos: ["acme/api"],
+    activity: "commit abc123 add login form",
+    summary: "The developer added a login form to the api repository.",
+    editedSummary: "Shipped the login form.",
+    createdAt: "2026-08-04T10:05:00.000Z",
+  });
+
+  assert.equal(saved.summary, "The developer added a login form to the api repository.");
+  assert.equal(saved.editedSummary, "Shipped the login form.");
+  assert.equal(listHistory(db)[0].editedSummary, "Shipped the login form.");
+});
+
+test("listSummaryExamples returns only rewrites, newest first, matching style", () => {
+  const db = tempDb();
+  const base = {
+    developerName: "asha",
+    repos: [],
+    activity: "commit abc123",
+  };
+
+  saveHistoryEntry(db, {
+    ...base,
+    id: "a",
+    workDate: "2026-08-01",
+    style: "concise",
+    summary: "generated one",
+    editedSummary: "Rewrite one.",
+    createdAt: "2026-08-01T10:00:00.000Z",
+  });
+  saveHistoryEntry(db, {
+    ...base,
+    id: "b",
+    workDate: "2026-08-02",
+    style: "concise",
+    summary: "generated two",
+    editedSummary: "Rewrite two.",
+    createdAt: "2026-08-02T10:00:00.000Z",
+  });
+  // Untouched by the user, so it carries no signal about their voice.
+  saveHistoryEntry(db, {
+    ...base,
+    id: "c",
+    workDate: "2026-08-03",
+    style: "concise",
+    summary: "generated three",
+    createdAt: "2026-08-03T10:00:00.000Z",
+  });
+  // A different style would fight the style instruction in the prompt.
+  saveHistoryEntry(db, {
+    ...base,
+    id: "d",
+    workDate: "2026-08-04",
+    style: "bullet-points",
+    summary: "generated four",
+    editedSummary: "- Rewrite four.",
+    createdAt: "2026-08-04T10:00:00.000Z",
+  });
+
+  assert.deepEqual(
+    listSummaryExamples(db, { style: "concise" }),
+    ["Rewrite two.", "Rewrite one."],
+  );
+  assert.deepEqual(
+    listSummaryExamples(db, { style: "bullet-points" }),
+    ["- Rewrite four."],
+  );
+  assert.deepEqual(listSummaryExamples(db, { style: "concise", limit: 1 }), ["Rewrite two."]);
+});
+
+test("listSummaryExamples ignores a rewrite identical to the generated summary", () => {
+  const db = tempDb();
+
+  saveHistoryEntry(db, {
+    id: "a",
+    developerName: "asha",
+    workDate: "2026-08-01",
+    style: "concise",
+    repos: [],
+    activity: "commit abc123",
+    summary: "Same text.",
+    editedSummary: "  Same text.  ",
+    createdAt: "2026-08-01T10:00:00.000Z",
+  });
+
+  assert.deepEqual(listSummaryExamples(db, { style: "concise" }), []);
 });
