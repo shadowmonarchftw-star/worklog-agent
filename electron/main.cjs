@@ -303,6 +303,13 @@ ipcMain.handle("update:install", () => {
   return { ok: true };
 });
 
+// Nothing else in the app reports which build is running, which made a stale
+// install and a failing update check indistinguishable from the outside.
+ipcMain.handle("app:version", () => ({
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+}));
+
 // The URL is built here rather than accepted from the renderer, so a compromised
 // page cannot turn this into a general "open any link" capability.
 ipcMain.handle("update:open-download", async (_event) => {

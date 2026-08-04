@@ -31,3 +31,20 @@ test("Settings explains branch coverage for both activity sources", async () => 
   assert.match(settings, /all local branches/i);
   assert.match(settings, /default branch/i);
 });
+
+test("Settings reports the running build version", async () => {
+  const settings = await readFile(
+    new URL("../app/components/SettingsView.jsx", import.meta.url),
+    "utf8",
+  );
+  const page = await readFile(
+    new URL("../app/page.jsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(settings, /appVersion/);
+  assert.match(settings, />Version</);
+  // A build running from source must not be mistaken for an installed release.
+  assert.match(settings, /development/);
+  assert.match(page, /getAppVersion/);
+});

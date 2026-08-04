@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld("worklogDesktop", {
   downloadUpdate: () => ipcRenderer.invoke("update:download"),
   installUpdate: () => ipcRenderer.invoke("update:install"),
   openUpdateDownload: () => ipcRenderer.invoke("update:open-download"),
+  getAppVersion: () => ipcRenderer.invoke("app:version"),
 });

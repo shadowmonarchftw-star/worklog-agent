@@ -78,6 +78,7 @@ export default function Home() {
   const [healthLoading, setHealthLoading] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateProgress, setUpdateProgress] = useState(null);
+  const [appVersion, setAppVersion] = useState(null);
   const [wizardStep, setWizardStep] = useState(0);
   // Read after mount, not in the initializer — localStorage is unavailable during
   // the server render and a mismatch here breaks hydration.
@@ -129,6 +130,9 @@ export default function Home() {
     if (errorListener) {
       errorListener((info) => setUpdateProgress({ error: info?.message || "The update could not be downloaded." }));
     }
+    // Only the Electron shell knows the build version; in a plain browser tab
+    // there is no packaged app to report, so the row stays hidden.
+    void window.worklogDesktop?.getAppVersion?.().then(setAppVersion).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -786,6 +790,7 @@ export default function Home() {
     googleSheetLink,
     googleSheetTab,
     googleSheetTabs,
+    appVersion,
     healthChecks,
     healthLoading,
     onAuthorChange: (value) => { setGithubAuthor(value); void saveSettings({ githubAuthor: value }); },

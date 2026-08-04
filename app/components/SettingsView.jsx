@@ -81,9 +81,20 @@ function SettingsPanel({ children, description, title }) {
   );
 }
 
-function HealthCheckSection({ healthChecks, healthLoading, onRunHealthCheck }) {
+function HealthCheckSection({ appVersion, healthChecks, healthLoading, onRunHealthCheck }) {
   return (
     <SettingsPanel title="Setup check" description="Test connections before generating or scheduling a worklog.">
+      {appVersion?.version && (
+        <div className="settings-action-row app-version-row">
+          <div>
+            <strong>Version</strong>
+            <span>Quote this when reporting a problem.</span>
+          </div>
+          <code className="app-version">
+            {appVersion.version}{appVersion.packaged === false ? " (development)" : ""}
+          </code>
+        </div>
+      )}
       <div className="settings-action-row">
         <div><strong>Connection diagnostics</strong><span>Checks selected activity source, Gemini, and Google Sheets access.</span></div>
         <button className="secondary-button" type="button" disabled={healthLoading} onClick={onRunHealthCheck}>

@@ -884,6 +884,8 @@ input[type="date"] {
 .chart-bar { width: min(24px, 100%); min-height: 8px; position: relative; background: var(--text-dim); border-radius: 3px 3px 0 0; }
 .chart-bar i { display: block; position: absolute; inset: auto 0 0; background: var(--accent); border-radius: 3px 3px 0 0; }
 .chart-legend { display: block; margin-top: 10px; color: var(--muted); font-size: 9px; }
+.app-version { padding: 5px 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+
 .model-picker { display: flex; gap: 8px; align-items: stretch; }
 .model-picker input { flex: 1; min-width: 0; }
 .model-picker .secondary-button { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
