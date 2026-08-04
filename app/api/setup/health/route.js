@@ -1,3 +1,4 @@
+import { guardLocalRequest } from "../../../../lib/localRouteAuth.mjs";
 import { getAppDb, getSetting, setSetting } from "../../../../lib/localDb.mjs";
 import { unreadableCredentials } from "../../../../lib/secureSettings.mjs";
 import { normalizeToken } from "../../../../lib/githubActivity.mjs";
@@ -100,7 +101,9 @@ function checkCredentials(settings, tokens) {
   );
 }
 
-export async function GET() {
+export async function GET(request) {
+  const denied = guardLocalRequest(request);
+  if (denied) return denied;
   const db = getAppDb();
   const settings = getSetting(db, settingsKey) || {};
   const tokens = getSetting(db, tokensKey);

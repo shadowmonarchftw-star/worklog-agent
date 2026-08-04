@@ -1,8 +1,11 @@
+import { guardLocalRequest } from "../../../../lib/localRouteAuth.mjs";
 import { collectGithubActivity } from "../../../../lib/githubProvider.mjs";
 import { collectLocalGitActivity } from "../../../../lib/localGitProvider.mjs";
 import { localDayUtcRange, localTimezone } from "../../../../lib/localDate.mjs";
 
 export async function POST(request) {
+  const denied = guardLocalRequest(request, { mutation: true });
+  if (denied) return denied;
   try {
     const {
       githubToken,

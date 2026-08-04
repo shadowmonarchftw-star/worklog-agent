@@ -1,3 +1,4 @@
+import { guardLocalRequest } from "../../../lib/localRouteAuth.mjs";
 import { generateGeminiRollup } from "../../../lib/geminiProvider.mjs";
 import { generateLocalRollup } from "../../../lib/localModelProvider.mjs";
 import { getAppDb, getSetting, listHistory } from "../../../lib/localDb.mjs";
@@ -5,6 +6,8 @@ import { rollupPeriodRange, selectRollupDays } from "../../../lib/worklogRollup.
 import { summaryProviderName } from "../../../lib/worklogService.mjs";
 
 export async function POST(request) {
+  const denied = guardLocalRequest(request, { mutation: true });
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { start, end } = rollupPeriodRange({

@@ -1,9 +1,12 @@
+import { guardLocalRequest } from "../../../lib/localRouteAuth.mjs";
 import { generateGeminiSummary } from "../../../lib/geminiProvider.mjs";
 import { generateLocalSummary } from "../../../lib/localModelProvider.mjs";
 import { getAppDb, listSummaryExamples } from "../../../lib/localDb.mjs";
 import { summaryProviderName } from "../../../lib/worklogService.mjs";
 
 export async function POST(request) {
+  const denied = guardLocalRequest(request, { mutation: true });
+  if (denied) return denied;
   try {
     const body = await request.json();
     const style = body.style?.trim() || "concise";

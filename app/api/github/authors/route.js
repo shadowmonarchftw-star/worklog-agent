@@ -1,3 +1,4 @@
+import { guardLocalRequest } from "../../../../lib/localRouteAuth.mjs";
 import { extractCommitAuthors, normalizeToken } from "../../../../lib/githubActivity.mjs";
 
 function githubHeaders(token) {
@@ -9,6 +10,8 @@ function githubHeaders(token) {
 }
 
 export async function POST(request) {
+  const denied = guardLocalRequest(request, { mutation: true });
+  if (denied) return denied;
   try {
     const { githubToken, repoFullNames } = await request.json();
     const token = normalizeToken(githubToken);

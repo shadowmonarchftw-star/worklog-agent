@@ -1,7 +1,10 @@
+import { guardLocalRequest } from "../../../../lib/localRouteAuth.mjs";
 import { getAppDb, getSetting, setSetting } from "../../../../lib/localDb.mjs";
 import { readGoogleSheetRows } from "../../../../lib/googleSheetsProvider.mjs";
 
 export async function POST(request) {
+  const denied = guardLocalRequest(request, { mutation: true });
+  if (denied) return denied;
   try {
     const { dates = [] } = await request.json();
     const db = getAppDb();

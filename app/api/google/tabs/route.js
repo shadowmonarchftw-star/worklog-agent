@@ -1,7 +1,10 @@
+import { guardLocalRequest } from "../../../../lib/localRouteAuth.mjs";
 import { extractSpreadsheetId } from "../../../../lib/googleSheets.mjs";
 import { getAppDb, getSetting } from "../../../../lib/localDb.mjs";
 
-export async function GET() {
+export async function GET(request) {
+  const denied = guardLocalRequest(request);
+  if (denied) return denied;
   try {
     const db = getAppDb();
     const settings = getSetting(db, "app-settings") || {};

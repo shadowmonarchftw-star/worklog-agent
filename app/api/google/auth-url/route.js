@@ -1,9 +1,12 @@
+import { guardLocalRequest } from "../../../../lib/localRouteAuth.mjs";
 import { getAppDb, getSetting } from "../../../../lib/localDb.mjs";
 
 const settingsKey = "app-settings";
 const redirectUri = "http://127.0.0.1:3000/api/google/callback";
 
-export async function GET() {
+export async function GET(request) {
+  const denied = guardLocalRequest(request);
+  if (denied) return denied;
   const settings = getSetting(getAppDb(), settingsKey) || {};
 
   if (!settings.googleClientId) {

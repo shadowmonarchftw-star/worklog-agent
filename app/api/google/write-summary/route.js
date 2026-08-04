@@ -1,3 +1,4 @@
+import { guardLocalRequest } from "../../../../lib/localRouteAuth.mjs";
 import { upsertGoogleSheetRow } from "../../../../lib/googleSheetsProvider.mjs";
 import { buildWorklogRow } from "../../../../lib/googleSheets.mjs";
 import { getAppDb, getSetting, saveSheetWrite, setSetting } from "../../../../lib/localDb.mjs";
@@ -7,6 +8,8 @@ const settingsKey = "app-settings";
 const googleTokensKey = "google-tokens";
 
 export async function POST(request) {
+  const denied = guardLocalRequest(request, { mutation: true });
+  if (denied) return denied;
   try {
     const { workDate, summary, reference } = await request.json();
     const db = getAppDb();
